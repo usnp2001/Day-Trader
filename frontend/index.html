@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>當沖選股與篩選平台 - Antigravity Trader</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="screener-page">
+
+    <!-- Header -->
+    <header>
+        <div class="logo-section">
+            <h1>ANTIGRAVITY選股主頁</h1>
+            <span style="font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 12px;">量化選股系統</span>
+        </div>
+        <div style="font-size:12px; color: var(--text-secondary);">
+            請選擇下方選股條件進行快速篩選，點擊股票可另開個股當沖看板。
+        </div>
+    </header>
+
+    <!-- Workspace Layout -->
+    <main style="padding: 16px; display: flex; flex-direction: column; gap: 16px; flex-grow: 1; overflow-y: auto;">
+        
+        <!-- Upper Section: Filter Selection Panel -->
+        <section class="panel" style="flex-shrink: 0;">
+            <div class="panel-header">
+                <span>量化選股條件篩選</span>
+                <span style="font-size: 11px; color: var(--text-muted);">量價 • 技術面 • 基本面</span>
+            </div>
+            <div class="panel-body" style="padding: 16px; background-color: var(--bg-panel);">
+                <form id="filter-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; align-items: end;">
+                    
+                    <!-- 1. Price Range Filter -->
+                    <div class="form-group">
+                        <label>現價區間 (TWD)</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="number" id="filter-price-min" placeholder="最低" style="flex:1; background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0">
+                            <span style="color:var(--text-muted);">~</span>
+                            <input type="number" id="filter-price-max" placeholder="最高" style="flex:1; background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0">
+                        </div>
+                    </div>
+
+                    <!-- 2. Volume Minimum Filter -->
+                    <div class="form-group">
+                        <label>成交量下限 (股)</label>
+                        <input type="number" id="filter-volume-min" placeholder="例如: 10000" style="background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0">
+                    </div>
+
+                    <!-- 3. Fundamental: PE Ratio Filter -->
+                    <div class="form-group">
+                        <label>本益比 (PE) 上限</label>
+                        <input type="number" id="filter-pe-max" placeholder="例如: 30" style="background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0" step="0.1">
+                    </div>
+
+                    <!-- 4. Technical: MA Bullish Checkbox -->
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; height: 32px;">
+                        <input type="checkbox" id="filter-ma-bullish" style="width: 16px; height: 16px; accent-color: var(--color-accent); cursor: pointer;">
+                        <label for="filter-ma-bullish" style="cursor: pointer; text-transform: none; font-size:12px; margin-bottom: 0;">均線多頭 (MA5 &gt; MA20)</label>
+                    </div>
+
+                    <!-- 5. Market Type: Exclude US Stocks Checkbox -->
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; height: 32px;">
+                        <input type="checkbox" id="filter-exclude-us" style="width: 16px; height: 16px; accent-color: var(--color-accent); cursor: pointer;">
+                        <label for="filter-exclude-us" style="cursor: pointer; text-transform: none; font-size:12px; margin-bottom: 0;">排除美股 (僅看台股)</label>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div>
+                        <button type="submit" style="background-color: var(--color-accent); border: none; color: white; padding: 8px 24px; font-size: 13px; font-weight: 600; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; width: 100%; height: 32px;">
+                            開始查詢 (篩選)
+                        </button>
+                    </div>
+                    
+                </form>
+            </div>
+        </section>
+
+        <!-- Lower Section: Paginated Stocks List Table -->
+        <section class="panel" style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="panel-header">
+                <span>符合條件股票清單</span>
+                <span id="results-count" style="font-size: 11px; color: var(--text-muted);">共 0 筆資料</span>
+            </div>
+            
+            <div class="panel-body" style="flex-grow: 1; overflow-y: auto;">
+                <table class="screener-list" style="font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th style="padding: 12px 8px;">商品代碼</th>
+                            <th>商品名稱</th>
+                            <th style="text-align: right;">現價 (元)</th>
+                            <th style="text-align: right;">今日漲跌幅</th>
+                            <th style="text-align: right;">成交量 (股)</th>
+                            <th style="text-align: right;">本益比 (倍)</th>
+                            <th style="text-align: center;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="screener-results-tbody">
+                        <!-- Populated dynamically by app.js -->
+                        <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">請點擊上方查詢獲取篩選結果...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bottom Pagination Controls -->
+            <div class="panel-header" style="height: 44px; display: flex; justify-content: center; align-items: center; gap: 20px; border-top: 1px solid var(--border-color); flex-shrink: 0;">
+                <button class="btn-tab" id="btn-prev-page" style="padding: 4px 16px;">上一頁</button>
+                <span id="page-indicator" style="font-family: monospace; font-size: 12px; color: var(--text-secondary);">第 1 / 1 頁</span>
+                <button class="btn-tab" id="btn-next-page" style="padding: 4px 16px;">下一頁</button>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

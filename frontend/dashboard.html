@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>個股看板與當沖下單 - Antigravity Trader</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Load TradingView Lightweight Charts CDN library (version locked) -->
+    <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body class="dashboard-page">
+
+    <!-- Top Account Stats Header -->
+    <header>
+        <div class="logo-section">
+            <a href="index.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 15px; color: var(--color-accent);">←</span>
+                <h1>ANTIGRAVITY TRADER</h1>
+            </a>
+            <div class="connection-status">
+                <div id="status-dot" class="status-dot"></div>
+                <span id="status-text">連線中...</span>
+            </div>
+        </div>
+
+        <!-- Stock Autocomplete Search Bar -->
+        <div class="search-section" style="position: relative; margin: 0 20px;">
+            <input type="text" id="symbol-search-input" placeholder="搜尋代號或名稱..." style="background: var(--bg-main); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px 12px; border-radius: 4px; font-size: 12px; width: 220px;" autocomplete="off">
+            <div id="search-suggestions" class="search-suggestions-dropdown" style="display: none; position: absolute; top: 34px; left: 0; width: 100%; background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                <!-- Suggestion items will go here -->
+            </div>
+        </div>
+        
+        <div class="header-summary">
+            <div class="summary-item">
+                <span>可用餘額</span>
+                <span id="account-cash" class="mono">NT$ 10,000,000</span>
+            </div>
+            <div class="summary-item">
+                <span>庫存市值</span>
+                <span id="account-mv" class="mono">NT$ 0</span>
+            </div>
+            <div class="summary-item">
+                <span>總資產</span>
+                <span id="account-assets" class="mono">NT$ 10,000,000</span>
+            </div>
+            <div class="summary-item">
+                <span>未實現損益</span>
+                <span id="account-pnl" class="mono">NT$ 0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Workspace Dashboard Grid -->
+    <div class="workspace">
+        
+        <!-- 1. Left/Center Area: Charts -->
+        <div class="panel chart-container">
+            <div class="panel-header">
+                <span id="active-stock-title">載入中...</span>
+                <div class="chart-controls" id="timeframe-controls">
+                    <button class="btn-tab" data-val="1m">1分K</button>
+                    <button class="btn-tab" data-val="5m">5分K</button>
+                    <button class="btn-tab" data-val="15m">15分K</button>
+                    <button class="btn-tab active" data-val="1d">日K</button>
+                    <button class="btn-tab" data-val="1wk">周K</button>
+                    <button class="btn-tab" data-val="1mo">月K</button>
+                </div>
+            </div>
+            <div class="panel-body" style="background-color: #161b25;">
+                <div class="chart-wrapper">
+                    <!-- Overlay information box on chart top left -->
+                    <div id="chart-overlay-info" class="chart-info-overlay">
+                        <span>讀取中...</span>
+                    </div>
+                    <!-- Chart canvas container -->
+                    <div id="tradingview-chart"></div>
+                    
+                    <!-- Sub Indicator Panel -->
+                    <div class="panel-header" style="height: 28px; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">
+                        <span>技術指標</span>
+                        <div class="chart-controls" id="indicator-controls">
+                            <button class="btn-tab active" data-val="KD">KD (9,3,3)</button>
+                            <button class="btn-tab" data-val="MACD">MACD (12,26,9)</button>
+                            <button class="btn-tab" data-val="OBV">OBV</button>
+                        </div>
+                    </div>
+                    <div id="indicator-chart"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Right Column: 5-Level Depth & Tick Log -->
+        <div class="market-depth-container">
+            <!-- Order Book (五檔) -->
+            <div class="panel five-level">
+                <div class="panel-header">
+                    <span>委託五檔 (點擊選價)</span>
+                    <span style="font-size: 10px; color: var(--text-muted);">雙擊/單擊下單</span>
+                </div>
+                <div class="panel-body" style="overflow: hidden;">
+                    <table class="depth-table">
+                        <thead>
+                            <tr>
+                                <th>委託價</th>
+                                <th>數量</th>
+                                <th>比例</th>
+                            </tr>
+                        </thead>
+                        <tbody id="depth-tbody">
+                            <!-- Populated dynamically by WS -->
+                            <tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px;">等待行情報價...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Execution Ticks Log -->
+            <div class="panel ticks-log">
+                <div class="panel-header">
+                    <span>成交明細 (即時)</span>
+                    <span style="font-size: 10px; color: var(--text-muted);">單位: 股/張</span>
+                </div>
+                <div class="panel-body">
+                    <table class="ticks-table">
+                        <thead>
+                            <tr>
+                                <th>時間</th>
+                                <th style="text-align: left;">成交價</th>
+                                <th style="text-align: right;">單量</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ticks-tbody">
+                            <!-- Populated dynamically by WS -->
+                            <tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px;">等待明細...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Bottom Panel: Portfolio / Inventory List & Order Log -->
+        <div class="panel bottom-panel">
+            <div class="tab-headers">
+                <button id="tab-portfolio-btn" class="tab-btn active">庫存部位查詢</button>
+                <button id="tab-orders-btn" class="tab-btn">委託與成交回報</button>
+            </div>
+            
+            <!-- Portfolio Table -->
+            <div id="tab-portfolio-content" class="tab-content active panel-body">
+                <table class="table-portfolio">
+                    <thead>
+                        <tr>
+                            <th>商品</th>
+                            <th>股數/張數</th>
+                            <th>平均成本</th>
+                            <th>現價</th>
+                            <th>庫存市值</th>
+                            <th>未實現損益 (幅度)</th>
+                            <th>動作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="portfolio-tbody">
+                        <!-- Populated dynamically by API -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Orders Table -->
+            <div id="tab-orders-content" class="tab-content panel-body">
+                <table class="table-orders">
+                    <thead>
+                        <tr>
+                            <th>委託時間</th>
+                            <th>商品</th>
+                            <th>動作</th>
+                            <th>委託價</th>
+                            <th>數量</th>
+                            <th>成交價</th>
+                            <th>狀態</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orders-tbody">
+                        <!-- Populated dynamically by API -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+    </div>
+
+    <!-- Interactive Trading Order Modal Overlay (下單小視窗) -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="trading-modal">
+            <div class="modal-header">
+                <h2 id="modal-title">台積電 (2330.TW) - 送出委託</h2>
+                <button id="btn-close-modal" class="btn-close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Action BUY/SELL switcher -->
+                <div class="trade-action-toggle">
+                    <button id="modal-action-buy" class="toggle-btn buy active">買進 (多)</button>
+                    <button id="modal-action-sell" class="toggle-btn sell">賣出 (空)</button>
+                </div>
+
+                <!-- Order Type selection (LIMIT/MARKET) -->
+                <div class="form-group">
+                    <label>委託類別</label>
+                    <div class="order-type-select">
+                        <label class="radio-label">
+                            <input type="radio" name="order_type" id="order-type-limit" value="LIMIT" checked>
+                            限價單 (LMT)
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="order_type" id="order-type-market" value="MARKET">
+                            市價單 (MKT)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Price input (with Quick Offset adjustment grid) -->
+                <div class="form-group">
+                    <label>委託價格 (TWD)</label>
+                    <div class="input-with-button">
+                        <input type="text" id="input-price" placeholder="價格">
+                    </div>
+                    <div class="price-picker-grid" id="picker-grid">
+                        <!-- Dynamic prices offsets based on tick rule -->
+                    </div>
+                </div>
+
+                <!-- Quantity input -->
+                <div class="form-group">
+                    <label>委託張/股數 (台灣單位:股)</label>
+                    <div class="input-with-button">
+                        <button class="quick-btn" id="btn-qty-minus">-</button>
+                        <input type="number" id="input-qty" value="1000" min="1" step="1000">
+                        <button class="quick-btn" id="btn-qty-plus">+</button>
+                    </div>
+                </div>
+
+                <!-- Estimated cost total -->
+                <div id="modal-est-total" class="modal-summary">
+                    <span>預估支出:</span>
+                    <span>NT$ 0</span>
+                </div>
+
+                <!-- Action Button -->
+                <button id="btn-order-submit" class="btn-submit-order buy">確認買進 (送出委託)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts Loading -->
+    <script src="chart.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>

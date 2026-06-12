@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: day_trading_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount backend code to allow live-reload during local editing
+      - ./backend:/app
+      # Mount frontend to the container root so the relative path "../frontend" resolves correctly
+      - ./frontend:/frontend
+      # Persist SQLite trading database on the host machine
+      - db_volume:/app/db
+    environment:
+      - ENV=development
+    restart: always
+
+volumes:
+  db_volume:
