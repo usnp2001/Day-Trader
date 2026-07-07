@@ -302,7 +302,7 @@ def sqlite3_connect_helper() -> List[Dict[str, Any]]:
     } for r in rows]
 
 
-if __name__ == "__main__":
-    crawler = StockCrawler()
-    crawler.sync_all_stock_metadata()
-    print("[Crawler] All stock metadata sync completed.")
+# if __name__ == "__main__":
+#     crawler = StockCrawler()
+#     crawler.sync_all_stock_metadata()
+#     print("[Crawler] All stock metadata sync completed.")
