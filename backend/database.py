@@ -79,9 +79,19 @@ def init_db():
             volume INTEGER NOT NULL,
             pe_ratio REAL,
             ma5 REAL,
-            ma20 REAL
+            ma20 REAL,
+            stockId INTEGER DEFAULT 0
         )
     """)
+    
+    # Try to add stockId column if it doesn't exist (migration for existing databases)
+    try:
+        cursor.execute("ALTER TABLE stock_metadata ADD COLUMN stockId INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    
+    # Remove old 'INTEL' symbol if it exists to clean up
+    cursor.execute("DELETE FROM stock_metadata WHERE symbol = 'INTEL'")
     
     # Seed default stock list with realistic stats for offline fallback
     cursor.execute("SELECT COUNT(*) FROM stock_metadata")
@@ -113,12 +123,26 @@ def init_db():
             ("GOOGL", "Alphabet", 175.0, 1.2, 0.69, 190000, 24.8, 173.0, 171.0),
             ("META", "Meta", 490.0, 8.5, 1.77, 150000, 27.2, 482.0, 475.0),
             ("NFLX", "Netflix", 640.0, 5.0, 0.79, 40000, 38.4, 632.0, 620.0),
-            ("INTEL", "Intel", 30.0, -0.5, -1.64, 500000, 32.0, 30.5, 31.2)
+            ("INTC", "Intel", 30.0, -0.5, -1.64, 500000, 32.0, 30.5, 31.2)
         ]
+        
+        # Add stockId values dynamically
+        default_stocks_with_id = []
+        for row in default_stocks:
+            sym = row[0]
+            if sym.endswith(".TW") or sym.endswith(".TWO"):
+                try:
+                    s_id = int(sym.split(".")[0])
+                except ValueError:
+                    s_id = 0
+            else:
+                s_id = 0
+            default_stocks_with_id.append(row + (s_id,))
+
         cursor.executemany("""
-            INSERT INTO stock_metadata (symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, default_stocks)
+            INSERT INTO stock_metadata (symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, default_stocks_with_id)
     
     conn.commit()
     conn.close()
@@ -244,7 +268,7 @@ class DBStore:
         """Query and filter stocks based on technical and fundamental criteria."""
         conn = get_db_connection()
         query = """
-            SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20
+            SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId
             FROM stock_metadata
             WHERE price >= ? AND price <= ? AND volume >= ? AND (pe_ratio IS NULL OR pe_ratio <= ?)
         """
@@ -254,7 +278,7 @@ class DBStore:
             query += " AND ma5 > ma20"
             
         if exclude_us:
-            query += " AND symbol LIKE '%.TW'"
+            query += " AND (symbol LIKE '%.TW' OR symbol LIKE '%.TWO')"
             
         rows = conn.execute(query, params).fetchall()
         conn.close()
@@ -270,7 +294,8 @@ class DBStore:
                 "volume": r["volume"],
                 "pe_ratio": r["pe_ratio"],
                 "ma5": r["ma5"],
-                "ma20": r["ma20"]
+                "ma20": r["ma20"],
+                "stockId": r["stockId"]
             })
         return stocks
 
@@ -280,9 +305,22 @@ class DBStore:
         conn = get_db_connection()
         cursor = conn.cursor()
         for s in stocks_list:
+            symbol = s["symbol"]
+            # Dynamically compute stockId if not provided
+            if "stockId" in s:
+                stock_id = s["stockId"]
+            else:
+                if symbol.endswith(".TW") or symbol.endswith(".TWO"):
+                    try:
+                        stock_id = int(symbol.split(".")[0])
+                    except ValueError:
+                        stock_id = 0
+                else:
+                    stock_id = 0
+
             cursor.execute("""
-                INSERT INTO stock_metadata (symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO stock_metadata (symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(symbol) DO UPDATE SET
                     price=excluded.price,
                     change=excluded.change,
@@ -290,10 +328,11 @@ class DBStore:
                     volume=excluded.volume,
                     pe_ratio=COALESCE(excluded.pe_ratio, pe_ratio),
                     ma5=COALESCE(excluded.ma5, ma5),
-                    ma20=COALESCE(excluded.ma20, ma20)
+                    ma20=COALESCE(excluded.ma20, ma20),
+                    stockId=excluded.stockId
             """, (
                 s["symbol"], s["name"], s.get("price", 0.0), s.get("change", 0.0), s.get("change_percent", 0.0),
-                s.get("volume", 0), s.get("pe_ratio"), s.get("ma5"), s.get("ma20")
+                s.get("volume", 0), s.get("pe_ratio"), s.get("ma5"), s.get("ma20"), stock_id
             ))
         conn.commit()
         conn.close()

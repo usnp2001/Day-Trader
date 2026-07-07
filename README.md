@@ -41,9 +41,12 @@
   - `chart.js`：Lightweight Charts 圖表初始化與技術指標數學運算。
 - `/backend`：FastAPI 後端與資料庫。
   - `main.py`：伺服器入口、WebSocket 行情推播與篩選/搜尋 APIs。
-  - `crawler.py`：`yfinance` 數據拉取，並於開機 3 秒後進行背景同步，計算各股 MA5、MA20 及本益比寫入資料庫快取。
-  - `database.py`：SQLite 資料庫設定。新建 `stock_metadata` 快取表，預載 25 筆熱門台美當沖股作為搜尋快查及選股基礎。
+  - `crawler.py`：`yfinance` 數據拉取，並於開機 3 秒後進行背景同步，支援台灣上市 (TWSE) 與上櫃 (TPEx) 股票爬取與同步，計算各股 MA5、MA20 及本益比寫入資料庫快取。
+  - `database.py`：SQLite 資料庫設定。新建 `stock_metadata` 快取表，預載 25 筆熱門台美當沖股（含修正後的美股 Intel 代號 `INTC` 與美股中英文名稱映射，並新增包含台股四位數代碼與美股預設為 0 的 `stockId` 欄位）作為搜尋快查及選股基礎。
   - `broker.py`：下單網關抽象層，模擬持久化 SQLite 交易。
+- `database_schema.txt`：資料庫用途與欄位結構說明文件。
+- `skill.md`：本專案功能與技術規格清單。
+- `README.md`：本專案手冊。
 
 ---
 

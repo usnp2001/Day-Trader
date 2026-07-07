@@ -1,3 +1,4 @@
+import sqlite3
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -11,7 +12,7 @@ DEFAULT_SYMBOLS = [
     "3231.TW", "2382.TW", "2618.TW", "2002.TW", "2881.TW",
     "2882.TW", "2303.TW", "2308.TW", "2891.TW", "2610.TW",
     "AAPL", "NVDA", "TSLA", "MSFT", "AMD", "AMZN", "GOOGL",
-    "META", "NFLX", "INTEL"
+    "META", "NFLX", "INTC"
 ]
 
 class StockCrawler:
@@ -20,64 +21,72 @@ class StockCrawler:
 
     def scrape_all_taiwan_stocks(self) -> List[Dict[str, Any]]:
         """
-        Scrapes all listed stock symbols and names from TWSE.
+        Scrapes all listed (上市) and OTC (上櫃) stock symbols and names from TWSE ISIN.
         Returns a list of dicts: [{"symbol": "2330.TW", "name": "台積電"}, ...]
         """
         import requests
         from bs4 import BeautifulSoup
         import re
 
-        url = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
+        configs = [
+            {"url": "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2", "suffix": ".TW"},
+            {"url": "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4", "suffix": ".TWO"}
+        ]
         stocks = []
-        try:
-            # TWSE uses Big5 (cp950) encoding
-            res = requests.get(url, timeout=10)
-            res.encoding = 'cp950'
-            
-            soup = BeautifulSoup(res.text, 'html.parser')
-            table = soup.find('table', class_='boardTemp')
-            if not table:
-                return []
+
+        for cfg in configs:
+            url = cfg["url"]
+            suffix = cfg["suffix"]
+            try:
+                # TWSE uses Big5 (cp950) encoding
+                res = requests.get(url, timeout=10)
+                res.encoding = 'cp950'
                 
-            in_stock_section = False
-            for row in table.find_all('tr'):
-                cells = row.find_all('td')
-                if not cells:
+                soup = BeautifulSoup(res.text, 'html.parser')
+                
+                table = soup.find('table', class_='h4')
+                if not table:
                     continue
-                
-                # Verify section headers
-                if len(cells) == 1:
-                    text = cells[0].text.strip()
-                    if "股票" in text:
-                        in_stock_section = True
-                    else:
-                        in_stock_section = False
-                    continue
-                
-                if in_stock_section and len(cells) >= 1:
-                    col1 = cells[0].text.strip()
-                    # Split by full-width space '　' or regular space
-                    parts = re.split(r'[\s　]+', col1)
-                    if len(parts) >= 2:
-                        code = parts[0]
-                        name = parts[1]
-                        # Standard Taiwan stocks have exactly 4 digits
-                        if re.match(r'^\d{4}$', code):
-                            # Seed with realistic baseline stats based on code prefix
-                            base_price = 10.0 + float(code[0]) * 45.0
-                            stocks.append({
-                                "symbol": f"{code}.TW",
-                                "name": name,
-                                "price": base_price,
-                                "change": 0.0,
-                                "change_percent": 0.0,
-                                "volume": 120000, # Default volume to pass filter defaults
-                                "pe_ratio": 15.0 + float(code[0]),
-                                "ma5": base_price * 1.01,
-                                "ma20": base_price
-                            })
-        except Exception as e:
-            print(f"[Crawler] Error scraping TWSE symbols: {e}")
+                    
+                in_stock_section = False
+                for row in table.find_all('tr'):
+                    cells = row.find_all('td')
+                    if not cells:
+                        continue
+                    
+                    # Verify section headers
+                    if len(cells) == 1:
+                        text = cells[0].text.strip()
+                        if "股票" in text:
+                            in_stock_section = True
+                        else:
+                            in_stock_section = False
+                        continue
+                    
+                    if in_stock_section and len(cells) >= 1:
+                        col1 = cells[0].text.strip()
+                        # Split by full-width space '　' or regular space
+                        parts = re.split(r'[\s　]+', col1)
+                        if len(parts) >= 2:
+                            code = parts[0]
+                            name = parts[1]
+                            # Standard Taiwan stocks have exactly 4 digits
+                            if re.match(r'^\d{4}$', code):
+                                # Seed with realistic baseline stats based on code prefix
+                                base_price = 10.0 + float(code[0]) * 45.0
+                                stocks.append({
+                                    "symbol": f"{code}{suffix}",
+                                    "name": name,
+                                    "price": base_price,
+                                    "change": 0.0,
+                                    "change_percent": 0.0,
+                                    "volume": 120000, # Default volume to pass filter defaults
+                                    "pe_ratio": 15.0 + float(code[0]),
+                                    "ma5": base_price * 1.01,
+                                    "ma20": base_price
+                                })
+            except Exception as e:
+                print(f"[Crawler] Error scraping symbols from {url}: {e}")
         
         return stocks
 
@@ -159,7 +168,11 @@ class StockCrawler:
             "2603.TW": "長榮", "2609.TW": "陽明", "3231.TW": "緯創",
             "2382.TW": "廣達", "2618.TW": "華航", "2002.TW": "中鋼",
             "2881.TW": "富邦金", "2882.TW": "國泰金", "2303.TW": "聯電",
-            "2308.TW": "台達電", "2891.TW": "中信金", "2610.TW": "長榮航"
+            "2308.TW": "台達電", "2891.TW": "中信金", "2610.TW": "長榮航",
+            "AAPL": "Apple", "NVDA": "NVIDIA", "TSLA": "Tesla",
+            "MSFT": "Microsoft", "AMD": "AMD", "AMZN": "Amazon",
+            "GOOGL": "Alphabet", "META": "Meta", "NFLX": "Netflix",
+            "INTC": "Intel"
         }
         return names.get(symbol, symbol)
 
@@ -279,10 +292,17 @@ def sqlite3_connect_helper() -> List[Dict[str, Any]]:
     """Helper to query all cached stock metadata directly from SQLite."""
     conn = sqlite3.connect("trading_platform.db")
     conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio FROM stock_metadata").fetchall()
+    rows = conn.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, stockId FROM stock_metadata").fetchall()
     conn.close()
     return [{
         "symbol": r["symbol"], "name": r["name"], "price": r["price"],
         "change": r["change"], "change_percent": r["change_percent"],
-        "volume": r["volume"], "pe_ratio": r["pe_ratio"]
+        "volume": r["volume"], "pe_ratio": r["pe_ratio"],
+        "stockId": r["stockId"]
     } for r in rows]
+
+
+if __name__ == "__main__":
+    crawler = StockCrawler()
+    crawler.sync_all_stock_metadata()
+    print("[Crawler] All stock metadata sync completed.")

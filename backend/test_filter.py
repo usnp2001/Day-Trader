@@ -87,7 +87,7 @@ def test_screener_features():
     print(f"-> SUCCESS: Found {len(no_us_stocks)} stocks after excluding US markets")
     for s in no_us_stocks:
         print(f"   Stock: {s['name']} ({s['symbol']})")
-        assert s["symbol"].endswith(".TW")
+        assert s["symbol"].endswith(".TW") or s["symbol"].endswith(".TWO")
 
     print("\n==================================================")
     print(" ALL FILTER & SEARCH VERIFICATION TESTS PASSED!")

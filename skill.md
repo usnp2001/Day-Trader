@@ -57,9 +57,11 @@
   - `account`：紀錄目前可用現金餘額（預設一千萬 NTD）。
   - `positions`：持久化庫存部位，買進/賣出/平倉時自動做加權平均成本重算，並在 qty=0 時自動清除。
   - `orders`：紀錄成交回報詳情。
-  - `stock_metadata`：常用篩選快取表，儲存股票基本面與均線資料。
+  - `stock_metadata`：常用篩選快取表，儲存股票基本面與均線資料（已修正美股 Intel 交易代號為 `INTC` 並引入美股中英文名稱映射關係，並於欄位新增 `stockId`，台股為 4 位數代號數值，美股則給 0）。
+- **資料庫欄位結構文件**：
+  - [database_schema.txt](file:///d:/python/stock/database_schema.txt) 說明資料庫各資料表與欄位型態、條件限制的獨立技術文檔。
 - **快取同步與爬蟲**：
-  - [crawler.py](file:///d:/python/stock/backend/crawler.py) 整合 `yfinance`，在伺服器 boot 啟動 3 秒後開啟背景排程，向外部抓取各股 PE 與 Close 歷史數據，滾動計算當前 MA5、MA20 均線值，回寫至 SQLite 快取，藉此讓首頁選股擁有毫秒級的查詢效率，克服線上即時爬蟲過慢的問題。
+  - [crawler.py](file:///d:/python/stock/backend/crawler.py) 整合 `yfinance`，在伺服器 boot 啟動 3 秒後開啟背景排程，爬取台灣上市（TWSE, `.TW`）與上櫃（TPEx, `.TWO`）所有股票代碼，向外部抓取各股 PE 與 Close 歷史數據，滾動計算當前 MA5、MA20 均線值，回寫至 SQLite 快取，藉此讓首頁選股擁有毫秒級的查詢效率，克服線上即時爬蟲過慢的問題。
 
 ---
 
