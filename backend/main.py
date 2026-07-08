@@ -1,7 +1,9 @@
 import asyncio
 import os
 import math
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header, Depends
+import shutil
+import uuid
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header, Depends, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -37,10 +39,33 @@ crawler = StockCrawler()
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    profile_pic: Optional[str] = None
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+class ProfileUpdateRequest(BaseModel):
+    email: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    profile_pic: Optional[str] = None
+    password: Optional[str] = None
+
+class AdminUserUpdateRequest(BaseModel):
+    role: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    profile_pic: Optional[str] = None
+    is_active: int
+    cash: float
 
 class CashAdjustmentRequest(BaseModel):
     cash: float
@@ -70,7 +95,13 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
     if "exp" in payload and payload["exp"] < time.time():
         raise HTTPException(status_code=401, detail="Token has expired")
         
-    return payload["sub"]
+    username = payload["sub"]
+    # Check if user is active in DB to prevent immediate access of disabled accounts
+    user = DBStore.get_user(username)
+    if not user or user.get("is_active") == 0:
+        raise HTTPException(status_code=403, detail="此帳戶不存在或已被停用。")
+        
+    return username
 
 async def get_current_admin(current_user: str = Depends(get_current_user)) -> str:
     user = DBStore.get_user(current_user)
@@ -96,7 +127,18 @@ async def register(req: RegisterRequest):
     salt = generate_salt()
     hashed = hash_password(password, salt)
     
-    success = DBStore.create_user(username, hashed, salt, role="user")
+    success = DBStore.create_user(
+        username=username,
+        hashed_password=hashed,
+        salt=salt,
+        role="user",
+        email=req.email,
+        name=req.name,
+        phone=req.phone,
+        address=req.address,
+        profile_pic=req.profile_pic,
+        is_active=1
+    )
     if not success:
         raise HTTPException(status_code=500, detail="Failed to create user account")
         
@@ -110,6 +152,9 @@ async def login_api(req: LoginRequest):
     user = DBStore.get_user(username)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
+        
+    if user.get("is_active") == 0:
+        raise HTTPException(status_code=403, detail="此帳戶已被停用，請聯絡管理員。")
         
     hashed = hash_password(password, user["salt"])
     if hashed != user["hashed_password"]:
@@ -130,6 +175,30 @@ async def login_api(req: LoginRequest):
         "role": user["role"]
     }
 
+@app.post("/api/upload_avatar")
+async def upload_avatar(file: UploadFile = File(...)):
+    # Verify file extension (only allow common image extensions)
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
+        raise HTTPException(status_code=400, detail="Invalid image format. Allowed: jpg, jpeg, png, gif, webp")
+    
+    # Define absolute uploads folder inside frontend
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
+    upload_dir = os.path.join(frontend_dir, "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Generate unique filename to avoid duplicates/overwrites
+    filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(upload_dir, filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        
+    return {"status": "success", "avatar_url": f"/uploads/{filename}"}
+
 # ==========================================
 # ACCOUNT ENDPOINTS
 # ==========================================
@@ -141,6 +210,57 @@ async def adjust_cash(req: CashAdjustmentRequest, current_user: str = Depends(ge
         return {"status": "success", "message": "Cash balance adjusted successfully", "cash": req.cash}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# USER PROFILE ENDPOINTS
+# ==========================================
+
+@app.get("/api/user/profile")
+async def get_user_profile(current_user: str = Depends(get_current_user)):
+    user = DBStore.get_user(current_user)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "status": "success",
+        "profile": {
+            "username": user["username"],
+            "role": user["role"],
+            "email": user["email"],
+            "name": user["name"],
+            "phone": user["phone"],
+            "address": user["address"],
+            "profile_pic": user["profile_pic"]
+        }
+    }
+
+@app.put("/api/user/profile")
+async def update_user_profile_api(req: ProfileUpdateRequest, current_user: str = Depends(get_current_user)):
+    user = DBStore.get_user(current_user)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    hashed_pwd = None
+    salt = None
+    if req.password:
+        if len(req.password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        salt = generate_salt()
+        hashed_pwd = hash_password(req.password, salt)
+        
+    success = DBStore.update_user_profile(
+        username=current_user,
+        email=req.email,
+        name=req.name,
+        phone=req.phone,
+        address=req.address,
+        profile_pic=req.profile_pic,
+        hashed_password=hashed_pwd,
+        salt=salt
+    )
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update profile")
+        
+    return {"status": "success", "message": "Profile updated successfully"}
 
 # ==========================================
 # ADMIN ENDPOINTS
@@ -176,6 +296,54 @@ async def admin_create_user(req: CreateUserRequest, current_admin: str = Depends
         raise HTTPException(status_code=500, detail="Failed to create user account")
         
     return {"status": "success", "message": f"User '{username}' created successfully as '{role}'"}
+
+@app.put("/api/admin/update_user/{target_username}")
+async def admin_update_user_api(
+    target_username: str,
+    req: AdminUserUpdateRequest,
+    current_admin: str = Depends(get_current_admin)
+):
+    if target_username == current_admin and req.is_active == 0:
+        raise HTTPException(status_code=400, detail="Cannot disable your own admin account")
+        
+    success = DBStore.admin_update_user(
+        username=target_username,
+        role=req.role,
+        email=req.email,
+        name=req.name,
+        phone=req.phone,
+        address=req.address,
+        profile_pic=req.profile_pic,
+        is_active=req.is_active,
+        cash=req.cash
+    )
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update user details")
+        
+    return {"status": "success", "message": f"User '{target_username}' updated successfully"}
+
+@app.post("/api/admin/toggle_user/{target_username}")
+async def admin_toggle_user(
+    target_username: str,
+    current_admin: str = Depends(get_current_admin)
+):
+    if target_username == current_admin:
+        raise HTTPException(status_code=400, detail="Cannot toggle your own admin account status")
+        
+    user = DBStore.get_user(target_username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    new_status = 0 if user["is_active"] == 1 else 1
+    
+    import sqlite3
+    conn = sqlite3.connect("trading_platform.db")
+    conn.execute("UPDATE users SET is_active = ? WHERE username = ?", (new_status, target_username))
+    conn.commit()
+    conn.close()
+    
+    status_str = "啟用" if new_status == 1 else "停用"
+    return {"status": "success", "message": f"使用者已{status_str}"}
 
 @app.delete("/api/admin/delete_user/{target_username}")
 async def admin_delete_user(target_username: str, current_admin: str = Depends(get_current_admin)):

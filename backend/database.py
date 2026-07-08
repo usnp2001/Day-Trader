@@ -39,9 +39,29 @@ def init_db():
             username TEXT PRIMARY KEY,
             hashed_password TEXT NOT NULL,
             salt TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'user'
+            role TEXT NOT NULL DEFAULT 'user',
+            email TEXT,
+            name TEXT,
+            phone TEXT,
+            address TEXT,
+            profile_pic TEXT,
+            is_active INTEGER DEFAULT 1
         )
     """)
+    
+    # Run database migration to add new columns if they do not exist
+    for col, col_type in [
+        ("email", "TEXT"), 
+        ("name", "TEXT"), 
+        ("phone", "TEXT"), 
+        ("address", "TEXT"), 
+        ("profile_pic", "TEXT"), 
+        ("is_active", "INTEGER DEFAULT 1")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError:
+            pass # Column already exists
 
     # 2. Account table (stores cash balance per user)
     cursor.execute("""
@@ -199,26 +219,47 @@ class DBStore:
     @staticmethod
     def get_user(username: str) -> Optional[Dict[str, Any]]:
         conn = get_db_connection()
-        row = conn.execute("SELECT username, hashed_password, salt, role FROM users WHERE username = ?", (username,)).fetchone()
+        row = conn.execute("""
+            SELECT username, hashed_password, salt, role, email, name, phone, address, profile_pic, is_active 
+            FROM users 
+            WHERE username = ?
+        """, (username,)).fetchone()
         conn.close()
         if row:
             return {
                 "username": row["username"],
                 "hashed_password": row["hashed_password"],
                 "salt": row["salt"],
-                "role": row["role"]
+                "role": row["role"],
+                "email": row["email"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "address": row["address"],
+                "profile_pic": row["profile_pic"],
+                "is_active": row["is_active"]
             }
         return None
 
     @staticmethod
-    def create_user(username: str, hashed_password: str, salt: str, role: str = "user") -> bool:
+    def create_user(
+        username: str, 
+        hashed_password: str, 
+        salt: str, 
+        role: str = "user",
+        email: Optional[str] = None,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        address: Optional[str] = None,
+        profile_pic: Optional[str] = None,
+        is_active: int = 1
+    ) -> bool:
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
             cursor.execute("""
-                INSERT INTO users (username, hashed_password, salt, role)
-                VALUES (?, ?, ?, ?)
-            """, (username, hashed_password, salt, role))
+                INSERT INTO users (username, hashed_password, salt, role, email, name, phone, address, profile_pic, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (username, hashed_password, salt, role, email, name, phone, address, profile_pic, is_active))
             cursor.execute("""
                 INSERT INTO account (username, cash)
                 VALUES (?, 10000000.0)
@@ -231,15 +272,85 @@ class DBStore:
             conn.close()
 
     @staticmethod
+    def update_user_profile(
+        username: str,
+        email: Optional[str] = None,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        address: Optional[str] = None,
+        profile_pic: Optional[str] = None,
+        hashed_password: Optional[str] = None,
+        salt: Optional[str] = None
+    ) -> bool:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            query = "UPDATE users SET email = ?, name = ?, phone = ?, address = ?, profile_pic = ?"
+            params = [email, name, phone, address, profile_pic]
+            if hashed_password and salt:
+                query += ", hashed_password = ?, salt = ?"
+                params.extend([hashed_password, salt])
+            query += " WHERE username = ?"
+            params.append(username)
+            cursor.execute(query, params)
+            conn.commit()
+            return True
+        except Exception:
+            return False
+        finally:
+            conn.close()
+
+    @staticmethod
+    def admin_update_user(
+        username: str,
+        role: str,
+        email: Optional[str] = None,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        address: Optional[str] = None,
+        profile_pic: Optional[str] = None,
+        is_active: int = 1,
+        cash: float = 10000000.0
+    ) -> bool:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE users 
+                SET role = ?, email = ?, name = ?, phone = ?, address = ?, profile_pic = ?, is_active = ?
+                WHERE username = ?
+            """, (role, email, name, phone, address, profile_pic, is_active, username))
+            cursor.execute("""
+                INSERT OR REPLACE INTO account (username, cash)
+                VALUES (?, ?)
+            """, (username, cash))
+            conn.commit()
+            return True
+        except Exception:
+            return False
+        finally:
+            conn.close()
+
+    @staticmethod
     def get_all_users() -> List[Dict[str, Any]]:
         conn = get_db_connection()
         rows = conn.execute("""
-            SELECT u.username, u.role, COALESCE(a.cash, 0.0) as cash
+            SELECT u.username, u.role, u.email, u.name, u.phone, u.address, u.profile_pic, u.is_active, COALESCE(a.cash, 0.0) as cash
             FROM users u
             LEFT JOIN account a ON u.username = a.username
         """).fetchall()
         conn.close()
-        return [{"username": r["username"], "role": r["role"], "cash": r["cash"]} for r in rows]
+        return [{
+            "username": r["username"],
+            "role": r["role"],
+            "email": r["email"],
+            "name": r["name"],
+            "phone": r["phone"],
+            "address": r["address"],
+            "profile_pic": r["profile_pic"],
+            "is_active": r["is_active"],
+            "cash": r["cash"]
+        } for r in rows]
 
     @staticmethod
     def delete_user(username: str) -> bool:

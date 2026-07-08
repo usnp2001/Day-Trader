@@ -113,7 +113,7 @@
         /* Main Dashboard Sections */
         .admin-grid {
             display: grid;
-            grid-template-columns: 350px 1fr;
+            grid-template-columns: 1fr;
             gap: 40px;
         }
 
@@ -264,6 +264,47 @@
             border: 1px solid rgba(8, 153, 129, 0.2);
             color: #0ada9b;
         }
+
+        /* Modal Overlay and Mask */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #161c24;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 440px;
+            max-width: 90%;
+            padding: 32px;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+            animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 24px;
+        }
     </style>
 </head>
 <body>
@@ -284,42 +325,21 @@
         <!-- Main Workspace -->
         <main class="admin-grid">
             
-            <!-- Left Side: Create User Form -->
-            <section class="panel-card">
-                <h2>開立新交易帳戶</h2>
-                <div class="alert alert-error" id="form-error"></div>
-                <div class="alert alert-success" id="form-success"></div>
-
-                <form id="create-user-form" onsubmit="handleCreateUser(event)">
-                    <div class="form-group">
-                        <label class="form-label" for="new-username">使用者帳號</label>
-                        <input class="form-input" type="text" id="new-username" placeholder="英文或數字" required minlength="3">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="new-password">密碼</label>
-                        <input class="form-input" type="password" id="new-password" placeholder="至少 6 位數密碼" required minlength="6">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="new-role">帳戶角色</label>
-                        <select class="form-select" id="new-role" required>
-                            <option value="user">一般使用者 (user)</option>
-                            <option value="admin">管理者 (admin)</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-full" id="btn-create-submit">建立帳戶</button>
-                </form>
-            </section>
-
             <!-- Right Side: User Accounts List -->
-            <section class="panel-card">
-                <h2>系統所有註冊帳戶列表</h2>
+            <section class="panel-card" style="grid-column: 1 / -1; margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <h2 style="margin-bottom: 0; border-left: 3px solid var(--accent-green); padding-left: 10px; font-size: 18px;">系統所有註冊帳戶列表</h2>
+                    <button class="btn btn-primary" onclick="openCreateUserModal()">開立新交易帳戶</button>
+                </div>
                 <div class="users-table-container">
                     <table class="users-table">
                         <thead>
                             <tr>
-                                <th>使用者帳號</th>
+                                <th>帳戶與頭像</th>
+                                <th>基本聯絡資訊</th>
                                 <th>角色權限</th>
-                                <th>當前可用資金 (TWD)</th>
+                                <th>可用資金 (TWD)</th>
+                                <th>帳戶狀態</th>
                                 <th>功能操作</th>
                             </tr>
                         </thead>
@@ -331,6 +351,100 @@
             </section>
 
         </main>
+    </div>
+
+    <!-- Create User Modal -->
+    <div class="modal-overlay" id="create-user-modal" style="display: none;">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 20px; border-left: 3px solid var(--accent-green); padding-left: 10px; font-size: 18px;">開立新交易帳戶</h2>
+            <div class="alert alert-error" id="form-error"></div>
+            <div class="alert alert-success" id="form-success"></div>
+
+            <form id="create-user-form" onsubmit="handleCreateUser(event)">
+                <div class="form-group">
+                    <label class="form-label" for="new-username">使用者帳號</label>
+                    <input class="form-input" type="text" id="new-username" placeholder="英文或數字" required minlength="3">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="new-password">密碼</label>
+                    <input class="form-input" type="password" id="new-password" placeholder="至少 6 位數密碼" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="new-role">帳戶角色</label>
+                    <select class="form-select" id="new-role" required>
+                        <option value="user">一般使用者 (user)</option>
+                        <option value="admin">管理者 (admin)</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeCreateUserModal()">取消</button>
+                    <button type="submit" class="btn btn-primary" id="btn-create-submit">建立帳戶</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div class="modal-overlay" id="edit-user-modal" style="display: none;">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 20px; border-left: 3px solid var(--accent-green); padding-left: 10px; font-size: 18px;">編輯使用者帳戶</h2>
+            
+            <form id="edit-user-form" onsubmit="handleSaveEditUser(event)">
+                <input type="hidden" id="edit-username-hidden">
+                
+                <div class="form-group">
+                    <label class="form-label">帳號</label>
+                    <input class="form-input" type="text" id="edit-username-display" disabled style="opacity: 0.6; cursor: not-allowed;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-name">真實姓名</label>
+                    <input class="form-input" type="text" id="edit-name" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-email">Email</label>
+                    <input class="form-input" type="email" id="edit-email" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-phone">電話</label>
+                    <input class="form-input" type="text" id="edit-phone" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-address">地址</label>
+                    <input class="form-input" type="text" id="edit-address" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-role">帳戶角色</label>
+                    <select class="form-select" id="edit-role" required>
+                        <option value="user">一般使用者 (user)</option>
+                        <option value="admin">管理者 (admin)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-cash">可用資金 (TWD)</label>
+                    <input class="form-input" type="number" id="edit-cash" required min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-avatar">大頭照上傳</label>
+                    <input class="form-input" type="file" id="edit-avatar" accept="image/*" onchange="uploadAvatarFile(this, 'edit-avatar-url', 'edit-avatar-preview')">
+                    <input type="hidden" id="edit-avatar-url">
+                    <div style="margin-top: 8px;" id="edit-avatar-preview-container">
+                        <img id="edit-avatar-preview" src="" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-green);">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-status">帳戶狀態</label>
+                    <select class="form-select" id="edit-status" required>
+                        <option value="1">啟用 (Active)</option>
+                        <option value="0">停用 (Disabled)</option>
+                    </select>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditUserModal()">取消</button>
+                    <button type="submit" class="btn btn-primary" id="btn-save-edit-submit">儲存修改</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script>
@@ -375,7 +489,10 @@
             }
         }
 
+        let allCachedUsers = []; // Cache list of users to reference when editing
+
         function renderUsersTable(users) {
+            allCachedUsers = users;
             usersListBody.innerHTML = '';
             users.forEach(user => {
                 const tr = document.createElement('tr');
@@ -383,20 +500,191 @@
                 const roleClass = user.role === 'admin' ? 'role-admin' : 'role-user';
                 const isSelf = user.username === currentAdminUser;
                 const formattedCash = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(user.cash);
+                const avatarSrc = user.profile_pic || '/uploads/default-avatar.png';
+                
+                // Status badge
+                const statusBadge = user.is_active === 1 
+                    ? `<span class="role-badge" style="background: rgba(8, 153, 129, 0.15); color: #0ada9b; border: 1px solid rgba(8, 153, 129, 0.2);">使用中</span>`
+                    : `<span class="role-badge" style="background: rgba(242, 54, 69, 0.15); color: #ff5a6a; border: 1px solid rgba(242, 54, 69, 0.2);">已停用</span>`;
+
+                const statusBtnText = user.is_active === 1 ? '停用' : '啟用';
+                const statusBtnClass = user.is_active === 1 ? 'btn-delete' : 'btn-delete'; // reuse styles
+                const statusBtnStyle = user.is_active === 1 
+                    ? 'background: rgba(242, 54, 69, 0.1); color: #ff5a6a; border: 1px solid rgba(242, 54, 69, 0.2);' 
+                    : 'background: rgba(0, 176, 107, 0.1); color: #00d984; border: 1px solid rgba(0, 176, 107, 0.2);';
 
                 tr.innerHTML = `
-                    <td style="font-weight: 500;">${user.username} ${isSelf ? '<span style="color: var(--text-secondary); font-size: 11px; font-weight: normal;">(您自己)</span>' : ''}</td>
+                    <td style="font-weight: 500;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <img src="${avatarSrc}" onerror="this.src='/uploads/default-avatar.png'" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color);">
+                            <div>
+                                <div style="font-weight: 600; color: #fff;">${user.username}</div>
+                                ${isSelf ? '<span style="color: var(--text-secondary); font-size: 10px;">(您自己)</span>' : ''}
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-size: 12px; line-height: 1.4; color: var(--text-secondary);">
+                            <div><b>姓名:</b> ${user.name || '-'}</div>
+                            <div><b>信箱:</b> ${user.email || '-'}</div>
+                            <div><b>電話:</b> ${user.phone || '-'}</div>
+                            <div><b>地址:</b> ${user.address || '-'}</div>
+                        </div>
+                    </td>
                     <td><span class="role-badge ${roleClass}">${user.role}</span></td>
                     <td style="font-family: 'Outfit', monospace; color: var(--accent-green); font-weight: 600;">${formattedCash}</td>
+                    <td>${statusBadge}</td>
                     <td>
-                        <button class="btn-delete" onclick="deleteUser('${user.username}')" ${isSelf ? 'disabled' : ''}>
-                            刪除帳戶
-                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn-secondary" style="padding: 6px 12px; font-size: 12px; height: 28px;" onclick="openEditUser('${user.username}')">
+                                編輯
+                            </button>
+                            <button class="btn-delete" style="${statusBtnStyle} padding: 6px 12px; font-size: 12px; height: 28px;" onclick="toggleUserStatus('${user.username}')" ${isSelf ? 'disabled' : ''}>
+                                ${statusBtnText}
+                            </button>
+                            <button class="btn-delete" style="padding: 6px 12px; font-size: 12px; height: 28px;" onclick="deleteUser('${user.username}')" ${isSelf ? 'disabled' : ''}>
+                                刪除
+                            </button>
+                        </div>
                     </td>
                 `;
                 usersListBody.appendChild(tr);
             });
         }
+
+        async function uploadAvatarFile(input, targetUrlInputId, previewImgId) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            try {
+                const response = await fetch('/api/upload_avatar', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    document.getElementById(targetUrlInputId).value = data.avatar_url;
+                    const previewImg = document.getElementById(previewImgId);
+                    previewImg.src = data.avatar_url;
+                    previewImg.style.display = 'block';
+                    alert('圖片上傳成功！');
+                } else {
+                    alert(data.detail || '圖片上傳失敗');
+                }
+            } catch (err) {
+                alert('上傳失敗，伺服器連線異常。');
+            }
+        }
+
+        function openEditUser(username) {
+            const user = allCachedUsers.find(u => u.username === username);
+            if (!user) return;
+            
+            document.getElementById('edit-username-hidden').value = user.username;
+            document.getElementById('edit-username-display').value = user.username;
+            document.getElementById('edit-name').value = user.name || '';
+            document.getElementById('edit-email').value = user.email || '';
+            document.getElementById('edit-phone').value = user.phone || '';
+            document.getElementById('edit-address').value = user.address || '';
+            document.getElementById('edit-role').value = user.role;
+            document.getElementById('edit-cash').value = user.cash;
+            document.getElementById('edit-status').value = user.is_active;
+            document.getElementById('edit-avatar-url').value = user.profile_pic || '';
+            
+            const previewImg = document.getElementById('edit-avatar-preview');
+            if (user.profile_pic) {
+                previewImg.src = user.profile_pic;
+                previewImg.style.display = 'block';
+            } else {
+                previewImg.src = '';
+                previewImg.style.display = 'none';
+            }
+            
+            document.getElementById('edit-user-modal').style.display = 'flex';
+        }
+
+        function closeEditUserModal() {
+            document.getElementById('edit-user-modal').style.display = 'none';
+        }
+
+        async function handleSaveEditUser(e) {
+            e.preventDefault();
+            const username = document.getElementById('edit-username-hidden').value;
+            const name = document.getElementById('edit-name').value.trim();
+            const email = document.getElementById('edit-email').value.trim();
+            const phone = document.getElementById('edit-phone').value.trim();
+            const address = document.getElementById('edit-address').value.trim();
+            const role = document.getElementById('edit-role').value;
+            const cash = parseFloat(document.getElementById('edit-cash').value);
+            const is_active = parseInt(document.getElementById('edit-status').value);
+            const profile_pic = document.getElementById('edit-avatar-url').value;
+
+            const submitBtn = document.getElementById('btn-save-edit-submit');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '儲存中...';
+
+            try {
+                const response = await fetch(`/api/admin/update_user/${username}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ role, email, name, phone, address, profile_pic, is_active, cash })
+                });
+
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    alert('帳戶資訊修改成功！');
+                    closeEditUserModal();
+                    fetchUsers();
+                } else {
+                    alert(data.detail || '修改失敗');
+                }
+            } catch (err) {
+                alert('連線伺服器失敗，請確認網路狀態。');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '儲存修改';
+            }
+        }
+
+        async function toggleUserStatus(username) {
+            try {
+                const response = await fetch(`/api/admin/toggle_user/${username}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    fetchUsers();
+                } else {
+                    alert(data.detail || '操作失敗');
+                }
+            } catch (err) {
+                alert('連線伺服器失敗，操作取消。');
+            }
+        }
+
+        window.openCreateUserModal = function() {
+            formError.style.display = 'none';
+            formSuccess.style.display = 'none';
+            document.getElementById('new-username').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('new-role').value = 'user';
+            document.getElementById('create-user-modal').style.display = 'flex';
+        };
+
+        window.closeCreateUserModal = function() {
+            document.getElementById('create-user-modal').style.display = 'none';
+        };
 
         async function handleCreateUser(e) {
             e.preventDefault();
@@ -431,7 +719,10 @@
                     usernameInput.value = '';
                     passwordInput.value = '';
                     roleSelect.value = 'user';
-                    fetchUsers();
+                    setTimeout(() => {
+                        closeCreateUserModal();
+                        fetchUsers();
+                    }, 1000);
                 } else {
                     showMessage('error', data.detail || '帳戶開立失敗，名稱可能已被佔用');
                 }

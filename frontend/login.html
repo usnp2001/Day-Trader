@@ -25,6 +25,19 @@
             margin: 0;
             padding: 0;
             font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+
+        ::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
+        }
+
+        html, body {
+            overflow-y: auto;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
         }
 
         body {
@@ -32,17 +45,17 @@
             background-image: 
                 radial-gradient(at 0% 0%, rgba(0, 176, 107, 0.1) 0px, transparent 50%),
                 radial-gradient(at 100% 100%, rgba(19, 23, 34, 0.8) 0px, transparent 50%);
-            height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             color: var(--text-primary);
-            overflow: hidden;
+            min-height: 100vh;
+            padding: 20px 0;
         }
 
         /* Glassmorphism Card Wrapper */
         .auth-container {
-            width: 420px;
+            width: 480px;
             background: var(--card-bg);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
@@ -234,6 +247,17 @@
             padding: 2px;
         }
 
+        /* 2-Column Registration Form Grid */
+        .register-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .form-group-full {
+            grid-column: 1 / -1;
+        }
+
         /* Footer Info */
         .auth-footer {
             margin-top: 24px;
@@ -292,18 +316,44 @@
                     </form>
                 </div>
 
-                <!-- REGISTER PANEL -->
+                 <!-- REGISTER PANEL -->
                 <div class="auth-form-panel">
                     <form id="form-register" onsubmit="handleRegister(event)">
-                        <div class="form-group">
-                            <label class="form-label" for="register-username">使用者帳號</label>
-                            <input class="form-input" type="text" id="register-username" placeholder="設定 4-15 字元英文或數字" required minlength="3" maxlength="15" autocomplete="username">
+                        <div class="register-grid">
+                            <div class="form-group">
+                                <label class="form-label" for="register-username">使用者帳號</label>
+                                <input class="form-input" type="text" id="register-username" placeholder="設定 4-15 字元" required minlength="3" maxlength="15" autocomplete="username">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="register-password">設定密碼</label>
+                                <input class="form-input" type="password" id="register-password" placeholder="請設定 6 位數以上" required minlength="6" autocomplete="new-password">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="register-name">真實姓名</label>
+                                <input class="form-input" type="text" id="register-name" placeholder="請輸入姓名" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="register-email">電子信箱 (Email)</label>
+                                <input class="form-input" type="email" id="register-email" placeholder="example@email.com" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="register-phone">聯絡電話</label>
+                                <input class="form-input" type="tel" id="register-phone" placeholder="例如: 0912345678" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="register-address">通訊地址</label>
+                                <input class="form-input" type="text" id="register-address" placeholder="請輸入完整通訊地址" required>
+                            </div>
+                            <div class="form-group form-group-full">
+                                <label class="form-label" for="register-avatar">上傳個人大頭照</label>
+                                <input class="form-input" type="file" id="register-avatar" accept="image/*" onchange="uploadAvatarFile(this, 'register-avatar-url', 'register-avatar-preview')">
+                                <input type="hidden" id="register-avatar-url">
+                                <div style="margin-top: 8px; display: none;" id="register-avatar-preview-container">
+                                    <img id="register-avatar-preview" src="" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-green);">
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="register-password">設定密碼</label>
-                            <input class="form-input" type="password" id="register-password" placeholder="請設定 6 位數以上密碼" required minlength="6" autocomplete="new-password">
-                        </div>
-                        <button type="submit" class="btn-submit" id="btn-register-submit">
+                        <button type="submit" class="btn-submit" id="btn-register-submit" style="margin-top: 16px;">
                             註冊並建立帳戶
                         </button>
                     </form>
@@ -403,16 +453,55 @@
             }
         }
 
+        async function uploadAvatarFile(input, targetUrlInputId, previewImgId) {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            try {
+                showAlert('success', '大頭照圖片上傳中...');
+                const response = await fetch('/api/upload_avatar', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    document.getElementById(targetUrlInputId).value = data.avatar_url;
+                    const previewImg = document.getElementById(previewImgId);
+                    previewImg.src = data.avatar_url;
+                    previewImg.parentElement.style.display = 'block';
+                    showAlert('success', '大頭照上傳成功！');
+                } else {
+                    showAlert('error', data.detail || '圖片上傳失敗，格式不符或檔案過大');
+                }
+            } catch (err) {
+                showAlert('error', '大頭照上傳失敗，伺服器連線異常。');
+            }
+        }
+
         async function handleRegister(e) {
             e.preventDefault();
             hideAlerts();
 
             const usernameInput = document.getElementById('register-username');
             const passwordInput = document.getElementById('register-password');
+            const emailInput = document.getElementById('register-email');
+            const nameInput = document.getElementById('register-name');
+            const phoneInput = document.getElementById('register-phone');
+            const addressInput = document.getElementById('register-address');
+            const avatarUrlInput = document.getElementById('register-avatar-url');
             const submitBtn = document.getElementById('btn-register-submit');
 
             const username = usernameInput.value.trim();
             const password = passwordInput.value;
+            const email = emailInput.value.trim();
+            const name = nameInput.value.trim();
+            const phone = phoneInput.value.trim();
+            const address = addressInput.value.trim();
+            const profile_pic = avatarUrlInput.value;
 
             submitBtn.disabled = true;
             submitBtn.textContent = '帳戶建立中...';
@@ -423,7 +512,15 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        email,
+                        name,
+                        phone,
+                        address,
+                        profile_pic
+                    })
                 });
 
                 const data = await response.json();
@@ -431,6 +528,12 @@
                     showAlert('success', '帳戶建立成功！即將引導登入...');
                     usernameInput.value = '';
                     passwordInput.value = '';
+                    emailInput.value = '';
+                    nameInput.value = '';
+                    phoneInput.value = '';
+                    addressInput.value = '';
+                    avatarUrlInput.value = '';
+                    document.getElementById('register-avatar-preview-container').style.display = 'none';
                     setTimeout(() => {
                         switchTab('login');
                         document.getElementById('login-username').value = username;

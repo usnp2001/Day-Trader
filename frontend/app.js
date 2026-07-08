@@ -68,10 +68,19 @@ function initializeHeader() {
     // Fetch user cash to show in header
     fetchUserCash();
 
+    // Fetch user profile and avatar
+    fetchUserProfileAndSetAvatar();
+
     // Bind cash adjustment pencil trigger
     const btnEditCash = document.getElementById('btn-edit-cash');
     if (btnEditCash) {
         btnEditCash.addEventListener('click', handleAdjustCash);
+    }
+
+    // Bind profile edit modal trigger
+    const btnUserProfile = document.getElementById('btn-user-profile');
+    if (btnUserProfile) {
+        btnUserProfile.addEventListener('click', openProfileModal);
     }
 }
 
@@ -313,4 +322,149 @@ function updatePaginationUI() {
 // Global window link function
 window.openDashboard = function(symbol) {
     window.open(`dashboard.html?symbol=${symbol}`, "_blank");
+};
+
+// ==========================================
+// USER PROFILE SETTINGS CONTROLLERS
+// ==========================================
+
+async function fetchUserProfileAndSetAvatar() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/user/profile`, {
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            const json = await res.json();
+            if (json.status === 'success' && json.profile) {
+                const profile = json.profile;
+                const avatarImg = document.getElementById('header-user-avatar');
+                if (avatarImg) {
+                    if (profile.profile_pic) {
+                        avatarImg.src = profile.profile_pic;
+                        avatarImg.style.display = 'inline-block';
+                    } else {
+                        avatarImg.src = '/uploads/default-avatar.png';
+                        avatarImg.style.display = 'inline-block';
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Failed to fetch user profile:", err);
+    }
+}
+
+window.openProfileModal = async function() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/user/profile`, {
+            headers: getAuthHeaders()
+        });
+        
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        const json = await res.json();
+        if (res.ok && json.status === 'success') {
+            const profile = json.profile;
+            
+            document.getElementById('profile-username').value = profile.username;
+            document.getElementById('profile-name').value = profile.name || '';
+            document.getElementById('profile-email').value = profile.email || '';
+            document.getElementById('profile-phone').value = profile.phone || '';
+            document.getElementById('profile-address').value = profile.address || '';
+            document.getElementById('profile-avatar-url').value = profile.profile_pic || '';
+            document.getElementById('profile-password').value = ''; // keep blank
+            
+            const previewImg = document.getElementById('profile-avatar-preview');
+            if (profile.profile_pic) {
+                previewImg.src = profile.profile_pic;
+                previewImg.style.display = 'block';
+            } else {
+                previewImg.src = '/uploads/default-avatar.png';
+                previewImg.style.display = 'block';
+            }
+            
+            document.getElementById('profile-modal').style.display = 'flex';
+        } else {
+            alert('無法獲取個人資料：' + json.detail);
+        }
+    } catch (err) {
+        alert('連線伺服器失敗，無法載入個人設定。');
+    }
+};
+
+window.closeProfileModal = function() {
+    document.getElementById('profile-modal').style.display = 'none';
+};
+
+window.uploadAvatarFile = async function(input, targetUrlInputId, previewImgId) {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/upload_avatar`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        if (response.ok && data.status === 'success') {
+            document.getElementById(targetUrlInputId).value = data.avatar_url;
+            const previewImg = document.getElementById(previewImgId);
+            previewImg.src = data.avatar_url;
+            previewImg.style.display = 'block';
+            alert('大頭照上傳成功！');
+        } else {
+            alert(data.detail || '大頭照上傳失敗');
+        }
+    } catch (err) {
+        alert('大頭照上傳失敗，伺服器連線異常。');
+    }
+};
+
+window.handleSaveProfile = async function(e) {
+    e.preventDefault();
+    
+    const email = document.getElementById('profile-email').value.trim();
+    const name = document.getElementById('profile-name').value.trim();
+    const phone = document.getElementById('profile-phone').value.trim();
+    const address = document.getElementById('profile-address').value.trim();
+    const profile_pic = document.getElementById('profile-avatar-url').value;
+    const password = document.getElementById('profile-password').value;
+    
+    const submitBtn = document.getElementById('btn-save-profile');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '儲存中...';
+    
+    const payload = { email, name, phone, address, profile_pic };
+    if (password) {
+        payload.password = password;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await response.json();
+        if (response.ok && data.status === 'success') {
+            alert('個人資料儲存成功！');
+            closeProfileModal();
+            fetchUserProfileAndSetAvatar(); // Refresh header avatar
+        } else {
+            alert(data.detail || '個人資料儲存失敗');
+        }
+    } catch (err) {
+        alert('儲存失敗，請檢查網路狀態。');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '儲存個人資料';
+    }
 };
