@@ -17,9 +17,18 @@ def test_flow():
     print(" STARTING BACKEND TRADING PLATFORM API TESTS")
     print("==================================================")
 
+    # 0. Authenticate admin user
+    login_resp = client.post("/api/auth/login", json={
+        "username": "admin",
+        "password": "admin123"
+    })
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     # 1. Test Stock Screener endpoint
     print("\n[Test 1] Fetching Stock Screener List...")
-    response = client.get("/api/screener")
+    response = client.get("/api/screener", headers=headers)
     assert response.status_code == 200
     json_data = response.json()
     assert json_data["status"] == "success"
@@ -30,7 +39,7 @@ def test_flow():
 
     # 2. Test initial Inventory endpoint
     print("\n[Test 2] Fetching Account Inventory & Summary...")
-    response = client.get("/api/inventory")
+    response = client.get("/api/inventory", headers=headers)
     assert response.status_code == 200
     json_data = response.json()
     assert json_data["status"] == "success"
@@ -51,7 +60,7 @@ def test_flow():
         "qty": 1000,
         "order_type": "LIMIT"
     }
-    response = client.post("/api/order", json=buy_req)
+    response = client.post("/api/order", json=buy_req, headers=headers)
     assert response.status_code == 200
     json_data = response.json()
     assert json_data["status"] == "success"
@@ -62,7 +71,7 @@ def test_flow():
 
     # 4. Test updated Inventory & cash persistence
     print("\n[Test 4] Querying Inventory again to verify cash deduction and position update...")
-    response = client.get("/api/inventory")
+    response = client.get("/api/inventory", headers=headers)
     assert response.status_code == 200
     json_data = response.json()
     summary = json_data["summary"]
@@ -79,7 +88,7 @@ def test_flow():
 
     # 5. Test Order History endpoint
     print("\n[Test 5] Fetching Order Transaction Log...")
-    response = client.get("/api/orders")
+    response = client.get("/api/orders", headers=headers)
     assert response.status_code == 200
     json_data = response.json()
     orders = json_data["orders"]

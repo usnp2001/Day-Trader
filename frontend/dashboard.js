@@ -45,10 +45,92 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ==========================================
+// AUTHENTICATION HEADERS & UTILITIES
+// ==========================================
+
+function getAuthHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+    };
+}
+
+window.handleLogout = function() {
+    localStorage.clear();
+    window.location.href = '/login.html';
+};
+
+function initializeHeader() {
+    const token = localStorage.getItem('token');
+    const username = localStorage.getItem('username');
+    const role = localStorage.getItem('role');
+
+    if (!token) {
+        handleLogout();
+        return;
+    }
+
+    // Populate user profile info in header
+    document.getElementById('header-username').textContent = username;
+    
+    if (role === 'admin') {
+        const roleBadge = document.getElementById('header-user-role');
+        if (roleBadge) {
+            roleBadge.textContent = 'admin';
+            roleBadge.style.display = 'inline-block';
+        }
+        const adminLink = document.getElementById('link-admin-panel');
+        if (adminLink) {
+            adminLink.style.display = 'inline-block';
+        }
+    }
+
+    // Bind cash adjustment pencil trigger
+    const btnEditCash = document.getElementById('btn-edit-cash');
+    if (btnEditCash) {
+        btnEditCash.addEventListener('click', handleAdjustCash);
+    }
+}
+
+async function handleAdjustCash() {
+    const currentCashVal = state.accountSummary.cash;
+    const newCashStr = prompt('請輸入新的可用現金金額 (TWD):', currentCashVal);
+    if (newCashStr === null) return;
+    const newCash = parseFloat(newCashStr);
+    if (isNaN(newCash) || newCash < 0) {
+        alert('請輸入有效的正數金額！');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/account/adjust_cash`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ cash: newCash })
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            state.accountSummary.cash = newCash;
+            renderAccountSummary();
+            recalculateHeaderAssets();
+        } else {
+            alert(data.detail || '金額修改失敗');
+        }
+    } catch (err) {
+        alert('連線伺服器失敗，請確認網路狀態。');
+    }
+}
+
+// ==========================================
 // INITIAL SETUP
 // ==========================================
 
 async function initApp() {
+    initializeHeader();
     await fetchScreenerList(); // Load all stocks cache first for name mapping
     await fetchInventory();
     
@@ -68,7 +150,13 @@ async function initApp() {
 
 async function fetchScreenerList() {
     try {
-        const res = await fetch(`${API_BASE_URL}/api/screener`);
+        const res = await fetch(`${API_BASE_URL}/api/screener`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
         const json = await res.json();
         if (json.status === "success") {
             state.screenerStocks = json.data;
@@ -80,7 +168,13 @@ async function fetchScreenerList() {
 
 async function fetchInventory() {
     try {
-        const res = await fetch(`${API_BASE_URL}/api/inventory`);
+        const res = await fetch(`${API_BASE_URL}/api/inventory`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
         const json = await res.json();
         if (json.status === "success") {
             state.positions = json.positions;
@@ -96,7 +190,13 @@ async function fetchInventory() {
 
 async function fetchOrders() {
     try {
-        const res = await fetch(`${API_BASE_URL}/api/orders`);
+        const res = await fetch(`${API_BASE_URL}/api/orders`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
         const json = await res.json();
         if (json.status === "success") {
             state.orders = json.orders;
@@ -109,7 +209,13 @@ async function fetchOrders() {
 
 async function fetchKlineHistory() {
     try {
-        const res = await fetch(`${API_BASE_URL}/api/kline/${state.selectedSymbol}?interval=${state.selectedInterval}`);
+        const res = await fetch(`${API_BASE_URL}/api/kline/${state.selectedSymbol}?interval=${state.selectedInterval}`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
         const json = await res.json();
         if (json.status === "success") {
             state.chartManager.loadData(json.data);
@@ -138,7 +244,8 @@ function connectWebSocket() {
     dot.className = "status-dot";
     statusText.innerText = "連接中...";
 
-    const wsUrl = `${WS_BASE_URL}/ws/market/${state.selectedSymbol}`;
+    const token = localStorage.getItem('token');
+    const wsUrl = `${WS_BASE_URL}/ws/market/${state.selectedSymbol}?token=${encodeURIComponent(token)}`;
     state.ws = new WebSocket(wsUrl);
 
     state.ws.onopen = () => {
@@ -151,9 +258,15 @@ function connectWebSocket() {
         handleLiveMarketPacket(data);
     };
 
-    state.ws.onclose = () => {
+    state.ws.onclose = (event) => {
         dot.className = "status-dot";
         statusText.innerText = "連線已中斷";
+        // If closed because of authorization failure, redirect
+        if (event.code === 1008) {
+            console.error("WebSocket auth rejected.");
+            handleLogout();
+            return;
+        }
         setTimeout(() => {
             if (state.ws === null) connectWebSocket();
         }, 3000);
@@ -220,7 +333,13 @@ function initSearchAutocomplete() {
         }
 
         try {
-            const res = await fetch(`${API_BASE_URL}/api/stocks/search?query=${encodeURIComponent(query)}`);
+            const res = await fetch(`${API_BASE_URL}/api/stocks/search?query=${encodeURIComponent(query)}`, {
+                headers: getAuthHeaders()
+            });
+            if (res.status === 401) {
+                handleLogout();
+                return;
+            }
             const json = await res.json();
             if (json.status === "success" && json.results.length > 0) {
                 renderSuggestions(json.results);
@@ -515,6 +634,7 @@ function renderOrderBookDepth(depth) {
 
 function appendTickLog(tick) {
     const tbody = document.getElementById("ticks-tbody");
+    if (!tbody) return;
     const tr = document.createElement("tr");
     
     const directionClass = tick.direction === "BUY" ? "up" : (tick.direction === "SELL" ? "down" : "");
@@ -649,7 +769,10 @@ async function submitOrder() {
     try {
         const res = await fetch(`${API_BASE_URL}/api/order`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem('token')}`
+            },
             body: JSON.stringify({
                 symbol: symbol,
                 action: action,
@@ -658,6 +781,11 @@ async function submitOrder() {
                 order_type: orderType
             })
         });
+
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
 
         const json = await res.json();
         if (json.status === "success") {

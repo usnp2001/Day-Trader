@@ -17,10 +17,19 @@ def test_screener_features():
     print(" STARTING SCREENER FILTER & AUTOCOMPLETE TESTS")
     print("==================================================")
 
+    # 0. Authenticate admin user
+    login_resp = client.post("/api/auth/login", json={
+        "username": "admin",
+        "password": "admin123"
+    })
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     # 1. Test Autocomplete Search API
     print("\n[Test 1] Testing Autocomplete Search Fuzzy Query...")
     # Query '台' (should match 台積電, 台達電)
-    res_tw = client.get("/api/stocks/search?query=台")
+    res_tw = client.get("/api/stocks/search?query=台", headers=headers)
     assert res_tw.status_code == 200
     json_tw = res_tw.json()
     assert json_tw["status"] == "success"
@@ -31,7 +40,7 @@ def test_screener_features():
     assert any(x["name"] == "台積電" for x in results_tw)
 
     # Query 'NV' (should match NVDA)
-    res_us = client.get("/api/stocks/search?query=NV")
+    res_us = client.get("/api/stocks/search?query=NV", headers=headers)
     assert res_us.status_code == 200
     json_us = res_us.json()
     assert json_us["status"] == "success"
@@ -52,7 +61,7 @@ def test_screener_features():
         "page": 1,
         "page_size": 5
     }
-    res_filter = client.get("/api/screener/filter", params=filter_params)
+    res_filter = client.get("/api/screener/filter", params=filter_params, headers=headers)
     assert res_filter.status_code == 200
     json_filter = res_filter.json()
     assert json_filter["status"] == "success"
@@ -69,7 +78,7 @@ def test_screener_features():
 
     # 3. Test Moving Average Bullish Alignment Filter
     print("\n[Test 3] Testing Moving Average Bullish Filter (MA5 > MA20)...")
-    res_ma = client.get("/api/screener/filter", params={"ma_bullish": True, "page_size": 20})
+    res_ma = client.get("/api/screener/filter", params={"ma_bullish": True, "page_size": 20}, headers=headers)
     assert res_ma.status_code == 200
     json_ma = res_ma.json()
     ma_stocks = json_ma["stocks"]
@@ -80,7 +89,7 @@ def test_screener_features():
 
     # 4. Test Exclude US Stocks Filter
     print("\n[Test 4] Testing Exclude US Stocks Filter (exclude_us = True)...")
-    res_no_us = client.get("/api/screener/filter", params={"exclude_us": True, "page_size": 30})
+    res_no_us = client.get("/api/screener/filter", params={"exclude_us": True, "page_size": 30}, headers=headers)
     assert res_no_us.status_code == 200
     json_no_us = res_no_us.json()
     no_us_stocks = json_no_us["stocks"]

@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>當沖看盤選股平台 - 管理者後台</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        // Synchronous Security Check before page load
+        if (!localStorage.getItem('token')) {
+            window.location.href = '/login.html';
+        } else if (localStorage.getItem('role') !== 'admin') {
+            window.location.href = '/index.html';
+        }
+    </script>
+    <style>
+        :root {
+            --bg-color: #0c0f12;
+            --card-bg: #161c24;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-green: #00b06b;
+            --accent-green-hover: #00d984;
+            --text-primary: #e1e7ed;
+            --text-secondary: #8e9aa8;
+            --input-bg: #131722;
+            --error-color: #f23645;
+            --success-color: #089981;
+            --danger-bg: rgba(242, 54, 69, 0.1);
+            --danger-text: #ff5a6a;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        /* Layout Grid */
+        .admin-wrapper {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Top Header */
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        .admin-title h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .admin-title p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 16px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-secondary {
+            background: #202630;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: #2a323f;
+        }
+
+        .btn-primary {
+            background: var(--accent-green);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-green-hover);
+        }
+
+        /* Main Dashboard Sections */
+        .admin-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 40px;
+        }
+
+        /* Glassmorphism Card Style */
+        .panel-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+        }
+
+        .panel-card h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            border-left: 3px solid var(--accent-green);
+            padding-left: 10px;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: var(--accent-green);
+        }
+
+        .btn-full {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* Table design */
+        .users-table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        .users-table th, .users-table td {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .users-table th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: rgba(0, 0, 0, 0.15);
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .users-table tr:hover td {
+            background: rgba(255, 255, 255, 0.015);
+        }
+
+        .role-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .role-admin {
+            background: rgba(0, 176, 107, 0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(0, 176, 107, 0.2);
+        }
+
+        .role-user {
+            background: rgba(142, 154, 168, 0.1);
+            color: var(--text-secondary);
+            border: 1px solid rgba(142, 154, 168, 0.2);
+        }
+
+        .btn-delete {
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            border: 1px solid rgba(242, 54, 69, 0.2);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-delete:hover:not(:disabled) {
+            background: var(--danger-text);
+            color: #fff;
+        }
+
+        .btn-delete:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Feedback Alerts */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert-error {
+            background: rgba(242, 54, 69, 0.1);
+            border: 1px solid rgba(242, 54, 69, 0.2);
+            color: #ff5a6a;
+        }
+
+        .alert-success {
+            background: rgba(8, 153, 129, 0.1);
+            border: 1px solid rgba(8, 153, 129, 0.2);
+            color: #0ada9b;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="admin-wrapper">
+        <!-- Top header bar -->
+        <header class="admin-header">
+            <div class="admin-title">
+                <h1>管理者主控台</h1>
+                <p>管理登入帳戶、指派角色與檢視資金分配</p>
+            </div>
+            <div class="header-actions">
+                <a href="/index.html" class="btn btn-secondary">回首頁</a>
+                <button onclick="handleLogout()" class="btn btn-secondary">登出後台</button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="admin-grid">
+            
+            <!-- Left Side: Create User Form -->
+            <section class="panel-card">
+                <h2>開立新交易帳戶</h2>
+                <div class="alert alert-error" id="form-error"></div>
+                <div class="alert alert-success" id="form-success"></div>
+
+                <form id="create-user-form" onsubmit="handleCreateUser(event)">
+                    <div class="form-group">
+                        <label class="form-label" for="new-username">使用者帳號</label>
+                        <input class="form-input" type="text" id="new-username" placeholder="英文或數字" required minlength="3">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-password">密碼</label>
+                        <input class="form-input" type="password" id="new-password" placeholder="至少 6 位數密碼" required minlength="6">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="new-role">帳戶角色</label>
+                        <select class="form-select" id="new-role" required>
+                            <option value="user">一般使用者 (user)</option>
+                            <option value="admin">管理者 (admin)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" id="btn-create-submit">建立帳戶</button>
+                </form>
+            </section>
+
+            <!-- Right Side: User Accounts List -->
+            <section class="panel-card">
+                <h2>系統所有註冊帳戶列表</h2>
+                <div class="users-table-container">
+                    <table class="users-table">
+                        <thead>
+                            <tr>
+                                <th>使用者帳號</th>
+                                <th>角色權限</th>
+                                <th>當前可用資金 (TWD)</th>
+                                <th>功能操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-list-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        const formError = document.getElementById('form-error');
+        const formSuccess = document.getElementById('form-success');
+        const usersListBody = document.getElementById('users-list-body');
+        const currentAdminUser = localStorage.getItem('username');
+
+        function showMessage(type, message) {
+            formError.style.display = 'none';
+            formSuccess.style.display = 'none';
+            if (type === 'error') {
+                formError.textContent = message;
+                formError.style.display = 'block';
+            } else {
+                formSuccess.textContent = message;
+                formSuccess.style.display = 'block';
+            }
+        }
+
+        async function fetchUsers() {
+            try {
+                const response = await fetch('/api/admin/users', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                
+                if (response.status === 401) {
+                    handleLogout();
+                    return;
+                }
+                
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    renderUsersTable(data.users);
+                } else {
+                    console.error('Failed to load user list', data);
+                }
+            } catch (err) {
+                console.error('Error fetching user list:', err);
+            }
+        }
+
+        function renderUsersTable(users) {
+            usersListBody.innerHTML = '';
+            users.forEach(user => {
+                const tr = document.createElement('tr');
+                
+                const roleClass = user.role === 'admin' ? 'role-admin' : 'role-user';
+                const isSelf = user.username === currentAdminUser;
+                const formattedCash = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(user.cash);
+
+                tr.innerHTML = `
+                    <td style="font-weight: 500;">${user.username} ${isSelf ? '<span style="color: var(--text-secondary); font-size: 11px; font-weight: normal;">(您自己)</span>' : ''}</td>
+                    <td><span class="role-badge ${roleClass}">${user.role}</span></td>
+                    <td style="font-family: 'Outfit', monospace; color: var(--accent-green); font-weight: 600;">${formattedCash}</td>
+                    <td>
+                        <button class="btn-delete" onclick="deleteUser('${user.username}')" ${isSelf ? 'disabled' : ''}>
+                            刪除帳戶
+                        </button>
+                    </td>
+                `;
+                usersListBody.appendChild(tr);
+            });
+        }
+
+        async function handleCreateUser(e) {
+            e.preventDefault();
+            formError.style.display = 'none';
+            formSuccess.style.display = 'none';
+
+            const usernameInput = document.getElementById('new-username');
+            const passwordInput = document.getElementById('new-password');
+            const roleSelect = document.getElementById('new-role');
+            const submitBtn = document.getElementById('btn-create-submit');
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+            const role = roleSelect.value;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = '建立中...';
+
+            try {
+                const response = await fetch('/api/admin/create_user', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ username, password, role })
+                });
+
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    showMessage('success', `帳戶 '${username}' 開立成功！`);
+                    usernameInput.value = '';
+                    passwordInput.value = '';
+                    roleSelect.value = 'user';
+                    fetchUsers();
+                } else {
+                    showMessage('error', data.detail || '帳戶開立失敗，名稱可能已被佔用');
+                }
+            } catch (err) {
+                showMessage('error', '連線伺服器失敗，請檢查網路狀態。');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '建立帳戶';
+            }
+        }
+
+        async function deleteUser(username) {
+            if (!confirm(`確定要永久刪除帳戶 '${username}' 嗎？此操作將同時清空其資產、庫存與歷史紀錄！`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/delete_user/${username}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    fetchUsers();
+                } else {
+                    alert(data.detail || '刪除失敗');
+                }
+            } catch (err) {
+                alert('連線伺服器失敗，刪除操作取消。');
+            }
+        }
+
+        function handleLogout() {
+            localStorage.clear();
+            window.location.href = '/login.html';
+        }
+
+        // Initialize user table list
+        fetchUsers();
+    </script>
+</body>
+</html>

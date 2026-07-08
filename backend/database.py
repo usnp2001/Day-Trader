@@ -15,48 +15,59 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 1. Account table (stores cash balance)
+    # Check if database needs migration from single-user to multi-user
+    # We do this by checking if the 'account' table has a 'username' column
+    needs_migration = False
+    try:
+        # Check if table exists
+        cursor.execute("SELECT * FROM sqlite_master WHERE type='table' AND name='account'")
+        table_exists = cursor.fetchone()
+        if table_exists:
+            cursor.execute("SELECT username FROM account LIMIT 1")
+    except sqlite3.OperationalError:
+        needs_migration = True
+
+    if needs_migration:
+        print("[Database] Old single-user schema detected. Migrating to multi-user schema...")
+        cursor.execute("DROP TABLE IF EXISTS account")
+        cursor.execute("DROP TABLE IF EXISTS positions")
+        cursor.execute("DROP TABLE IF EXISTS orders")
+
+    # 1. Users table (stores user accounts and credentials)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            hashed_password TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user'
+        )
+    """)
+
+    # 2. Account table (stores cash balance per user)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS account (
-            id INTEGER PRIMARY KEY,
+            username TEXT PRIMARY KEY,
             cash REAL NOT NULL
         )
     """)
     
-    # Check if cash exists, if not, insert default $10,000,000 NTD
-    cursor.execute("SELECT COUNT(*) FROM account")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO account (id, cash) VALUES (1, 10000000.0)")
-        
-    # 2. Positions table (portfolio inventory)
+    # 3. Positions table (portfolio inventory per user)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS positions (
-            symbol TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            symbol TEXT NOT NULL,
             name TEXT NOT NULL,
             qty INTEGER NOT NULL,
-            buy_price REAL NOT NULL
+            buy_price REAL NOT NULL,
+            PRIMARY KEY (username, symbol)
         )
     """)
-    
-    # Seed default positions if database is empty
-    cursor.execute("SELECT COUNT(*) FROM positions")
-    if cursor.fetchone()[0] == 0:
-        default_positions = [
-            ("2330.TW", "台積電", 2000, 890.0),
-            ("2317.TW", "鴻海", 5000, 180.0),
-            ("2454.TW", "聯發科", 1000, 1200.0),
-            ("AAPL", "AAPL", 100, 205.0)
-        ]
-        for symbol, name, qty, buy_price in default_positions:
-            cursor.execute(
-                "INSERT INTO positions (symbol, name, qty, buy_price) VALUES (?, ?, ?, ?)",
-                (symbol, name, qty, buy_price)
-            )
 
-    # 3. Orders table (transaction history)
+    # 4. Orders table (transaction history per user)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             order_id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
             symbol TEXT NOT NULL,
             action TEXT NOT NULL,
             price REAL NOT NULL,
@@ -68,7 +79,7 @@ def init_db():
         )
     """)
 
-    # 4. Stock Metadata Cache Table (For fast screening and autocomplete searching)
+    # 5. Stock Metadata Cache Table (For fast screening and autocomplete searching)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS stock_metadata (
             symbol TEXT PRIMARY KEY,
@@ -92,6 +103,39 @@ def init_db():
     
     # Remove old 'INTEL' symbol if it exists to clean up
     cursor.execute("DELETE FROM stock_metadata WHERE symbol = 'INTEL'")
+
+    # Seed default user if empty
+    cursor.execute("SELECT COUNT(*) FROM users")
+    if cursor.fetchone()[0] == 0:
+        import hashlib
+        import uuid
+        
+        # 1. Create admin user (admin / admin123)
+        admin_username = "admin"
+        admin_password = "admin123"
+        admin_salt = uuid.uuid4().hex
+        admin_hashed = hashlib.sha256((admin_password + admin_salt).encode('utf-8')).hexdigest()
+        
+        cursor.execute("""
+            INSERT INTO users (username, hashed_password, salt, role)
+            VALUES (?, ?, ?, 'admin')
+        """, (admin_username, admin_hashed, admin_salt))
+        
+        # 2. Initialize admin account cash
+        cursor.execute("INSERT INTO account (username, cash) VALUES (?, 10000000.0)", (admin_username,))
+        
+        # 3. Seed default positions for admin
+        default_positions = [
+            ("2330.TW", "台積電", 2000, 890.0),
+            ("2317.TW", "鴻海", 5000, 180.0),
+            ("2454.TW", "聯發科", 1000, 1200.0),
+            ("AAPL", "AAPL", 100, 205.0)
+        ]
+        for symbol, name, qty, buy_price in default_positions:
+            cursor.execute("""
+                INSERT INTO positions (username, symbol, name, qty, buy_price)
+                VALUES (?, ?, ?, ?, ?)
+            """, (admin_username, symbol, name, qty, buy_price))
     
     # Seed default stock list with realistic stats for offline fallback
     cursor.execute("SELECT COUNT(*) FROM stock_metadata")
@@ -153,23 +197,84 @@ class DBStore:
     """Helper class to query and write details to SQLite."""
     
     @staticmethod
-    def get_cash() -> float:
+    def get_user(username: str) -> Optional[Dict[str, Any]]:
         conn = get_db_connection()
-        row = conn.execute("SELECT cash FROM account WHERE id = 1").fetchone()
+        row = conn.execute("SELECT username, hashed_password, salt, role FROM users WHERE username = ?", (username,)).fetchone()
+        conn.close()
+        if row:
+            return {
+                "username": row["username"],
+                "hashed_password": row["hashed_password"],
+                "salt": row["salt"],
+                "role": row["role"]
+            }
+        return None
+
+    @staticmethod
+    def create_user(username: str, hashed_password: str, salt: str, role: str = "user") -> bool:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO users (username, hashed_password, salt, role)
+                VALUES (?, ?, ?, ?)
+            """, (username, hashed_password, salt, role))
+            cursor.execute("""
+                INSERT INTO account (username, cash)
+                VALUES (?, 10000000.0)
+            """, (username,))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_all_users() -> List[Dict[str, Any]]:
+        conn = get_db_connection()
+        rows = conn.execute("""
+            SELECT u.username, u.role, COALESCE(a.cash, 0.0) as cash
+            FROM users u
+            LEFT JOIN account a ON u.username = a.username
+        """).fetchall()
+        conn.close()
+        return [{"username": r["username"], "role": r["role"], "cash": r["cash"]} for r in rows]
+
+    @staticmethod
+    def delete_user(username: str) -> bool:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM users WHERE username = ?", (username,))
+            cursor.execute("DELETE FROM account WHERE username = ?", (username,))
+            cursor.execute("DELETE FROM positions WHERE username = ?", (username,))
+            cursor.execute("DELETE FROM orders WHERE username = ?", (username,))
+            conn.commit()
+            return True
+        except Exception:
+            return False
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_cash(username: str) -> float:
+        conn = get_db_connection()
+        row = conn.execute("SELECT cash FROM account WHERE username = ?", (username,)).fetchone()
         conn.close()
         return row["cash"] if row else 10000000.0
 
     @staticmethod
-    def update_cash(new_cash: float):
+    def update_cash(username: str, new_cash: float):
         conn = get_db_connection()
-        conn.execute("UPDATE account SET cash = ? WHERE id = 1", (new_cash,))
+        conn.execute("UPDATE account SET cash = ? WHERE username = ?", (new_cash, username))
         conn.commit()
         conn.close()
 
     @staticmethod
-    def get_positions() -> List[Dict[str, Any]]:
+    def get_positions(username: str) -> List[Dict[str, Any]]:
         conn = get_db_connection()
-        rows = conn.execute("SELECT symbol, name, qty, buy_price FROM positions WHERE qty != 0").fetchall()
+        rows = conn.execute("SELECT symbol, name, qty, buy_price FROM positions WHERE username = ? AND qty != 0", (username,)).fetchall()
         conn.close()
         
         positions = []
@@ -187,26 +292,27 @@ class DBStore:
         return positions
 
     @staticmethod
-    def update_position(symbol: str, name: str, qty: int, buy_price: float):
+    def update_position(username: str, symbol: str, name: str, qty: int, buy_price: float):
         conn = get_db_connection()
         if qty == 0:
-            conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+            conn.execute("DELETE FROM positions WHERE username = ? AND symbol = ?", (username, symbol))
         else:
             conn.execute("""
-                INSERT OR REPLACE INTO positions (symbol, name, qty, buy_price)
-                VALUES (?, ?, ?, ?)
-            """, (symbol, name, qty, buy_price))
+                INSERT OR REPLACE INTO positions (username, symbol, name, qty, buy_price)
+                VALUES (?, ?, ?, ?, ?)
+            """, (username, symbol, name, qty, buy_price))
         conn.commit()
         conn.close()
 
     @staticmethod
-    def add_order(order: Dict[str, Any]):
+    def add_order(username: str, order: Dict[str, Any]):
         conn = get_db_connection()
         conn.execute("""
-            INSERT INTO orders (order_id, symbol, action, price, qty, order_type, status, exec_price, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (order_id, username, symbol, action, price, qty, order_type, status, exec_price, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             order["order_id"],
+            username,
             order["symbol"],
             order["action"],
             order["price"],
@@ -220,9 +326,9 @@ class DBStore:
         conn.close()
 
     @staticmethod
-    def get_all_orders() -> List[Dict[str, Any]]:
+    def get_all_orders(username: str) -> List[Dict[str, Any]]:
         conn = get_db_connection()
-        rows = conn.execute("SELECT order_id, symbol, action, price, qty, order_type, status, exec_price, timestamp FROM orders ORDER BY rowid DESC").fetchall()
+        rows = conn.execute("SELECT order_id, symbol, action, price, qty, order_type, status, exec_price, timestamp FROM orders WHERE username = ? ORDER BY rowid DESC", (username,)).fetchall()
         conn.close()
         
         orders = []

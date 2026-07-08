@@ -17,12 +17,116 @@ const state = {
 const API_BASE_URL = `${window.location.protocol}//${window.location.host}`;
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Initialize user session header
+    initializeHeader();
+
     // 1. Initial default query to present list of stocks on load
     fetchFilteredStocks();
 
     // 2. Bind Form and Pagination UI Events
     bindEvents();
 });
+
+function getAuthHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+    };
+}
+
+window.handleLogout = function() {
+    localStorage.clear();
+    window.location.href = '/login.html';
+};
+
+function initializeHeader() {
+    const token = localStorage.getItem('token');
+    const username = localStorage.getItem('username');
+    const role = localStorage.getItem('role');
+
+    if (!token) {
+        handleLogout();
+        return;
+    }
+
+    // Populate user profile info in header
+    document.getElementById('header-username').textContent = username;
+    
+    if (role === 'admin') {
+        const roleBadge = document.getElementById('header-user-role');
+        if (roleBadge) {
+            roleBadge.textContent = 'admin';
+            roleBadge.style.display = 'inline-block';
+        }
+        const adminLink = document.getElementById('link-admin-panel');
+        if (adminLink) {
+            adminLink.style.display = 'inline-block';
+        }
+    }
+
+    // Fetch user cash to show in header
+    fetchUserCash();
+
+    // Bind cash adjustment pencil trigger
+    const btnEditCash = document.getElementById('btn-edit-cash');
+    if (btnEditCash) {
+        btnEditCash.addEventListener('click', handleAdjustCash);
+    }
+}
+
+async function fetchUserCash() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/inventory`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
+        const json = await res.json();
+        if (json.status === 'success') {
+            updateCashDisplay(json.summary.cash);
+        }
+    } catch (err) {
+        console.error("Failed to fetch account cash:", err);
+    }
+}
+
+function updateCashDisplay(cash) {
+    const formatted = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0 }).format(cash);
+    document.getElementById('header-user-cash').textContent = formatted;
+}
+
+async function handleAdjustCash() {
+    const currentCashVal = parseFloat(document.getElementById('header-user-cash').textContent.replace(/[^0-9.-]+/g,""));
+    const newCashStr = prompt('請輸入新的可用現金金額 (TWD):', currentCashVal);
+    if (newCashStr === null) return;
+    const newCash = parseFloat(newCashStr);
+    if (isNaN(newCash) || newCash < 0) {
+        alert('請輸入有效的正數金額！');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/account/adjust_cash`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ cash: newCash })
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            updateCashDisplay(newCash);
+        } else {
+            alert(data.detail || '金額修改失敗');
+        }
+    } catch (err) {
+        alert('連線伺服器失敗，請確認網路狀態。');
+    }
+}
 
 function bindEvents() {
     // Form submit query listener
@@ -86,7 +190,15 @@ async function fetchFilteredStocks() {
     });
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/screener/filter?${params.toString()}`);
+        const res = await fetch(`${API_BASE_URL}/api/screener/filter?${params.toString()}`, {
+            headers: getAuthHeaders()
+        });
+        
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
+
         const json = await res.json();
         
         if (json.status === "success") {

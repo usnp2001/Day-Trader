@@ -53,18 +53,19 @@ class MockBroker(BrokerGateway):
     High-fidelity Mock Broker that simulates accounts, order executions,
     and real-time market data ticks/orderbook for development.
     """
-    def __init__(self):
+    def __init__(self, username: str = "admin"):
+        self.username = username
         # Sync with database
-        self.cash = DBStore.get_cash()
+        self.cash = DBStore.get_cash(username)
         
         # Load positions from database
         self.positions: Dict[str, Dict[str, Any]] = {}
-        for pos in DBStore.get_positions():
+        for pos in DBStore.get_positions(username):
             self.positions[pos["symbol"]] = pos
 
-        self.orders: List[Dict[str, Any]] = DBStore.get_all_orders()
+        self.orders: List[Dict[str, Any]] = DBStore.get_all_orders(username)
         self.order_counter = 1000 + len(self.orders)
-        self.is_logged_in = False
+        self.is_logged_in = True
 
     def login(self, user_id: str, password: str, cert_path: Optional[str] = None, cert_pass: Optional[str] = None) -> bool:
         self.is_logged_in = True
@@ -125,7 +126,7 @@ class MockBroker(BrokerGateway):
         }
         
         # Save order to database
-        DBStore.add_order(order)
+        DBStore.add_order(self.username, order)
         self.orders.insert(0, order) # Prepend to history
         self._process_execution(order)
         return order
@@ -201,12 +202,12 @@ class MockBroker(BrokerGateway):
                 }
 
         # Update database with new values
-        DBStore.update_cash(self.cash)
+        DBStore.update_cash(self.username, self.cash)
         if symbol in self.positions:
             pos = self.positions[symbol]
-            DBStore.update_position(symbol, name, pos["qty"], pos["buy_price"])
+            DBStore.update_position(self.username, symbol, name, pos["qty"], pos["buy_price"])
         else:
-            DBStore.update_position(symbol, name, 0, 0.0)
+            DBStore.update_position(self.username, symbol, name, 0, 0.0)
 
     def generate_live_market_data(self, symbol: str, base_price: float) -> Dict[str, Any]:
         """
