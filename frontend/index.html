@@ -54,9 +54,9 @@
                     <div class="form-group">
                         <label>現價區間 (TWD)</label>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="number" id="filter-price-min" placeholder="最低" style="flex:1; background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0">
+                            <input type="number" id="filter-price-min" placeholder="最低" style="width: 0; flex: 1; min-width: 0; background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0">
                             <span style="color:var(--text-muted);">~</span>
-                            <input type="number" id="filter-price-max" placeholder="最高" style="flex:1; background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0">
+                            <input type="number" id="filter-price-max" placeholder="最高" style="width: 0; flex: 1; min-width: 0; background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 6px 10px; border-radius: 4px; font-size:12px;" min="0">
                         </div>
                     </div>
 
@@ -84,10 +84,13 @@
                         <label for="filter-exclude-us" style="cursor: pointer; text-transform: none; font-size:12px; margin-bottom: 0;">排除美股 (僅看台股)</label>
                     </div>
 
-                    <!-- Submit Button -->
-                    <div>
-                        <button type="submit" style="background-color: var(--color-accent); border: none; color: white; padding: 8px 24px; font-size: 13px; font-weight: 600; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; width: 100%; height: 32px;">
-                            開始查詢 (篩選)
+                    <!-- Submit & Ace Screener Buttons -->
+                    <div style="display: flex; gap: 8px;">
+                        <button type="submit" style="background-color: var(--color-accent); border: none; color: white; padding: 8px 12px; font-size: 13px; font-weight: 600; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; flex: 1; height: 32px; white-space: nowrap;">
+                            開始查詢
+                        </button>
+                        <button type="button" id="btn-ace-screener" class="btn-ace" style="flex: 1; white-space: nowrap;">
+                            艾斯選股
                         </button>
                     </div>
                     
@@ -98,7 +101,7 @@
         <!-- Lower Section: Paginated Stocks List Table -->
         <section class="panel" style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden;">
             <div class="panel-header">
-                <span>符合條件股票清單</span>
+                <span id="panel-title-text">符合條件股票清單</span>
                 <span id="results-count" style="font-size: 11px; color: var(--text-muted);">共 0 筆資料</span>
             </div>
             

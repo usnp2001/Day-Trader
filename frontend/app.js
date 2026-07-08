@@ -4,6 +4,7 @@ const state = {
     currentPage: 1,
     totalPages: 1,
     pageSize: 10,
+    currentMode: "filter", // "filter" or "ace"
     filters: {
         price_min: 0,
         price_max: 999999,
@@ -21,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeHeader();
 
     // 1. Initial default query to present list of stocks on load
-    fetchFilteredStocks();
+    fetchStocks();
 
     // 2. Bind Form and Pagination UI Events
     bindEvents();
@@ -152,45 +153,72 @@ function bindEvents() {
             exclude_us: excludeUs
         };
         
+        state.currentMode = "filter";
         // Reset to page 1
         state.currentPage = 1;
-        fetchFilteredStocks();
+        fetchStocks();
     });
+
+    // Ace stock selection button listener
+    const btnAce = document.getElementById("btn-ace-screener");
+    if (btnAce) {
+        btnAce.addEventListener("click", () => {
+            state.currentMode = "ace";
+            state.currentPage = 1;
+            fetchStocks();
+        });
+    }
 
     // Pagination Button Listeners
     document.getElementById("btn-prev-page").addEventListener("click", () => {
         if (state.currentPage > 1) {
             state.currentPage--;
-            fetchFilteredStocks();
+            fetchStocks();
         }
     });
 
     document.getElementById("btn-next-page").addEventListener("click", () => {
         if (state.currentPage < state.totalPages) {
             state.currentPage++;
-            fetchFilteredStocks();
+            fetchStocks();
         }
     });
 }
 
-async function fetchFilteredStocks() {
+async function fetchStocks() {
     const tbody = document.getElementById("screener-results-tbody");
     tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">查詢中，請稍後...</td></tr>`;
 
-    // Construct URL query parameters
-    const params = new URLSearchParams({
-        price_min: state.filters.price_min,
-        price_max: state.filters.price_max,
-        min_volume: state.filters.min_volume,
-        pe_max: state.filters.pe_max,
-        ma_bullish: state.filters.ma_bullish,
-        exclude_us: state.filters.exclude_us,
-        page: state.currentPage,
-        page_size: state.pageSize
-    });
+    let url;
+    if (state.currentMode === "ace") {
+        const params = new URLSearchParams({
+            page: state.currentPage,
+            page_size: state.pageSize
+        });
+        url = `${API_BASE_URL}/api/screener/ace?${params.toString()}`;
+    } else {
+        // Construct URL query parameters
+        const params = new URLSearchParams({
+            price_min: state.filters.price_min,
+            price_max: state.filters.price_max,
+            min_volume: state.filters.min_volume,
+            pe_max: state.filters.pe_max,
+            ma_bullish: state.filters.ma_bullish,
+            exclude_us: state.filters.exclude_us,
+            page: state.currentPage,
+            page_size: state.pageSize
+        });
+        url = `${API_BASE_URL}/api/screener/filter?${params.toString()}`;
+    }
+
+    // Update panel title header dynamically based on current mode
+    const panelTitle = document.getElementById("panel-title-text");
+    if (panelTitle) {
+        panelTitle.innerText = state.currentMode === "ace" ? "符合條件股票清單 (艾斯選股)" : "符合條件股票清單 (自訂篩選)";
+    }
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/screener/filter?${params.toString()}`, {
+        const res = await fetch(url, {
             headers: getAuthHeaders()
         });
         
@@ -212,7 +240,7 @@ async function fetchFilteredStocks() {
             tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.detail}</td></tr>`;
         }
     } catch (err) {
-        console.error("Filter request failed:", err);
+        console.error("Fetch request failed:", err);
         tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-up); padding: 40px;">選股伺服器連線失敗！</td></tr>`;
     }
 }

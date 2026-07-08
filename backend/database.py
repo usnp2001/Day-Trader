@@ -406,6 +406,37 @@ class DBStore:
         return stocks
 
     @staticmethod
+    def get_stocks_by_symbols(symbols: List[str]) -> List[Dict[str, Any]]:
+        """Query and return metadata for a specific list of stock symbols."""
+        if not symbols:
+            return []
+        conn = get_db_connection()
+        placeholders = ",".join(["?"] * len(symbols))
+        query = f"""
+            SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId
+            FROM stock_metadata
+            WHERE symbol IN ({placeholders})
+        """
+        rows = conn.execute(query, symbols).fetchall()
+        conn.close()
+        
+        stocks = []
+        for r in rows:
+            stocks.append({
+                "symbol": r["symbol"],
+                "name": r["name"],
+                "price": r["price"],
+                "change": r["change"],
+                "change_percent": r["change_percent"],
+                "volume": r["volume"],
+                "pe_ratio": r["pe_ratio"],
+                "ma5": r["ma5"],
+                "ma20": r["ma20"],
+                "stockId": r["stockId"]
+            })
+        return stocks
+
+    @staticmethod
     def update_stock_metadata(stocks_list: List[Dict[str, Any]]):
         """Updates or inserts stock details in bulk (used by backend crawlers)."""
         conn = get_db_connection()

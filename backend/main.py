@@ -244,6 +244,36 @@ async def filter_screener(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/screener/ace")
+async def ace_screener(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1),
+    current_user: str = Depends(get_current_user)
+):
+    try:
+        # Predefined symbols for Ace Stock Selection mock data
+        ace_symbols = ["2330.TW", "2317.TW", "2454.TW", "2603.TW", "3231.TW"]
+        
+        # Fetch actual stock metadata from DB for these symbols to make sure the app behaves realistically
+        ace_stocks = DBStore.get_stocks_by_symbols(ace_symbols)
+        
+        total_count = len(ace_stocks)
+        total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
+        
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_stocks = ace_stocks[start_idx:end_idx]
+        
+        return {
+            "status": "success",
+            "stocks": paginated_stocks,
+            "total_pages": total_pages,
+            "current_page": page,
+            "total_count": total_count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/stocks/search")
 async def search_stocks(query: str = Query("", min_length=1), current_user: str = Depends(get_current_user)):
     try:

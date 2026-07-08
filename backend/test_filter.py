@@ -98,6 +98,19 @@ def test_screener_features():
         print(f"   Stock: {s['name']} ({s['symbol']})")
         assert s["symbol"].endswith(".TW") or s["symbol"].endswith(".TWO")
 
+    # 5. Test Ace Stock Selection API
+    print("\n[Test 5] Testing Ace Stock Selection API (/api/screener/ace)...")
+    res_ace = client.get("/api/screener/ace", params={"page": 1, "page_size": 10}, headers=headers)
+    assert res_ace.status_code == 200
+    json_ace = res_ace.json()
+    assert json_ace["status"] == "success"
+    ace_stocks = json_ace["stocks"]
+    print(f"-> SUCCESS: Found {json_ace['total_count']} stocks in Ace Stock Selection list")
+    for s in ace_stocks:
+        print(f"   Stock: {s['name']} ({s['symbol']})")
+        # Validate that the symbol is one of the expected ace stocks
+        assert s["symbol"] in ["2330.TW", "2317.TW", "2454.TW", "2603.TW", "3231.TW"]
+
     print("\n==================================================")
     print(" ALL FILTER & SEARCH VERIFICATION TESTS PASSED!")
     print("==================================================")
