@@ -4,11 +4,10 @@ from fastapi.testclient import TestClient
 import os
 import sys
 
-# Add backend to python path if run from root
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add backend to python path if run from test directory
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from main import app
-from database import DBStore
 
 client = TestClient(app)
 

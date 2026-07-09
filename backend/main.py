@@ -1,30 +1,34 @@
-import asyncio
+import sys
 import os
-import math
-import shutil
-import uuid
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header, Depends, File, UploadFile
+import asyncio
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
-import sys
-import subprocess
+from fastapi.responses import JSONResponse
+from typing import Optional
 
-from crawler import StockCrawler
+# Setup sys.path to resolve backend package imports
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+from common.config import JWT_SECRET
+from common.logger import logger
+from common.auth_utils import verify_jwt
+from common.exceptions import ServiceException
+from dal.database_init import init_db
+from dal.user_dao import UserDao
+from dal.stock_metadata_dao import StockMetadataDao
 from broker import MockBroker
-from database import DBStore
-from auth_utils import create_jwt, verify_jwt, generate_salt, hash_password
-from logger import logger
+from crawler import StockCrawler
+
+# Controllers
+from controller import auth_controller, account_controller, order_controller, stock_controller
 
 app = FastAPI(
-    title="Day Trading Web Platform API - Phase 3",
-    description="Backend API supporting stock filtering, autocompletion search, and JWT authenticated day trading."
+    title="Day Trading Web Platform API - Phase 3 (MVC Refactoring)",
+    description="Backend API rebuilt with structured MVC & Three-Tier architecture."
 )
-
-# JWT Secret Key
-JWT_SECRET = "super_secret_trading_platform_key_12345"
 
 # Enable CORS
 app.add_middleware(
@@ -35,498 +39,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Instantiate core modules (global crawler for shared stock_metadata updates)
+# Register Custom Exception Handler
+@app.exception_handler(ServiceException)
+async def service_exception_handler(request: Request, exc: ServiceException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message}
+    )
+
+# Include Routers
+app.include_router(auth_controller.router)
+app.include_router(account_controller.router)
+app.include_router(order_controller.router)
+app.include_router(stock_controller.router)
+
+# Instantiate crawler for startup background sync
 crawler = StockCrawler()
 
-# Pydantic models for request bodies
-class RegisterRequest(BaseModel):
-    username: str
-    password: str
-    email: Optional[str] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    profile_pic: Optional[str] = None
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-class ProfileUpdateRequest(BaseModel):
-    email: Optional[str] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    profile_pic: Optional[str] = None
-    password: Optional[str] = None
-
-class AdminUserUpdateRequest(BaseModel):
-    role: str
-    email: Optional[str] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    profile_pic: Optional[str] = None
-    is_active: int
-    cash: float
-
-class CashAdjustmentRequest(BaseModel):
-    cash: float
-
-class CreateUserRequest(BaseModel):
-    username: str
-    password: str
-    role: str
-
-class OrderRequest(BaseModel):
-    symbol: str
-    action: str       # 'BUY' or 'SELL'
-    price: float      # Limit price, or 0/null for market
-    qty: int          # Quantity in shares/lots
-    order_type: str    # 'LIMIT' or 'MARKET'
-
-# JWT Authentication Dependency
-async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid authentication token")
-    token = authorization.split(" ")[1]
-    payload = verify_jwt(token, JWT_SECRET)
-    if not payload or "sub" not in payload:
-        raise HTTPException(status_code=401, detail="Invalid token or session expired")
-    
-    import time
-    if "exp" in payload and payload["exp"] < time.time():
-        raise HTTPException(status_code=401, detail="Token has expired")
-        
-    username = payload["sub"]
-    # Check if user is active in DB to prevent immediate access of disabled accounts
-    user = DBStore.get_user(username)
-    if not user or user.get("is_active") == 0:
-        raise HTTPException(status_code=403, detail="此帳戶不存在或已被停用。")
-        
-    return username
-
-async def get_current_admin(current_user: str = Depends(get_current_user)) -> str:
-    user = DBStore.get_user(current_user)
-    if not user or user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Permission denied. Admin role required.")
-    return current_user
-
-# ==========================================
-# AUTHENTICATION ENDPOINTS
-# ==========================================
-
-@app.post("/api/auth/register")
-async def register(req: RegisterRequest):
-    username = req.username.strip()
-    password = req.password
-    
-    if not username or len(password) < 6:
-        raise HTTPException(status_code=400, detail="Username cannot be empty and password must be at least 6 characters")
-        
-    if DBStore.get_user(username):
-        raise HTTPException(status_code=400, detail="Username is already taken")
-        
-    salt = generate_salt()
-    hashed = hash_password(password, salt)
-    
-    success = DBStore.create_user(
-        username=username,
-        hashed_password=hashed,
-        salt=salt,
-        role="user",
-        email=req.email,
-        name=req.name,
-        phone=req.phone,
-        address=req.address,
-        profile_pic=req.profile_pic,
-        is_active=1
-    )
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to create user account")
-        
-    return {"status": "success", "message": "Registered successfully"}
-
-@app.post("/api/auth/login")
-async def login_api(req: LoginRequest):
-    username = req.username.strip()
-    password = req.password
-    
-    user = DBStore.get_user(username)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-        
-    if user.get("is_active") == 0:
-        raise HTTPException(status_code=403, detail="此帳戶已被停用，請聯絡管理員。")
-        
-    hashed = hash_password(password, user["salt"])
-    if hashed != user["hashed_password"]:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-        
-    import time
-    payload = {
-        "sub": user["username"],
-        "role": user["role"],
-        "exp": int(time.time()) + 86400
-    }
-    token = create_jwt(payload, JWT_SECRET)
-    
-    return {
-        "status": "success",
-        "access_token": token,
-        "username": user["username"],
-        "role": user["role"]
-    }
-
-@app.post("/api/upload_avatar")
-async def upload_avatar(file: UploadFile = File(...)):
-    # Verify file extension (only allow common image extensions)
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
-        raise HTTPException(status_code=400, detail="Invalid image format. Allowed: jpg, jpeg, png, gif, webp")
-    
-    # Define absolute uploads folder inside frontend
-    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
-    upload_dir = os.path.join(frontend_dir, "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    
-    # Generate unique filename to avoid duplicates/overwrites
-    filename = f"{uuid.uuid4().hex}{ext}"
-    file_path = os.path.join(upload_dir, filename)
-    
+# Background Task: Sync yfinance metadata on startup
+async def background_yfinance_sync():
+    logger.info("[Startup] Waiting 3 seconds before initiating background metadata sync...")
+    await asyncio.sleep(3)
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        crawler.sync_all_stock_metadata()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
-        
-    return {"status": "success", "avatar_url": f"/uploads/{filename}"}
+        logger.error(f"[Startup] Background sync encountered an error: {e}")
 
-# ==========================================
-# ACCOUNT ENDPOINTS
-# ==========================================
-
-@app.post("/api/account/adjust_cash")
-async def adjust_cash(req: CashAdjustmentRequest, current_user: str = Depends(get_current_user)):
-    try:
-        DBStore.update_cash(current_user, req.cash)
-        return {"status": "success", "message": "Cash balance adjusted successfully", "cash": req.cash}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ==========================================
-# USER PROFILE ENDPOINTS
-# ==========================================
-
-@app.get("/api/user/profile")
-async def get_user_profile(current_user: str = Depends(get_current_user)):
-    user = DBStore.get_user(current_user)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {
-        "status": "success",
-        "profile": {
-            "username": user["username"],
-            "role": user["role"],
-            "email": user["email"],
-            "name": user["name"],
-            "phone": user["phone"],
-            "address": user["address"],
-            "profile_pic": user["profile_pic"]
-        }
-    }
-
-@app.put("/api/user/profile")
-async def update_user_profile_api(req: ProfileUpdateRequest, current_user: str = Depends(get_current_user)):
-    user = DBStore.get_user(current_user)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    hashed_pwd = None
-    salt = None
-    if req.password:
-        if len(req.password) < 6:
-            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-        salt = generate_salt()
-        hashed_pwd = hash_password(req.password, salt)
-        
-    success = DBStore.update_user_profile(
-        username=current_user,
-        email=req.email,
-        name=req.name,
-        phone=req.phone,
-        address=req.address,
-        profile_pic=req.profile_pic,
-        hashed_password=hashed_pwd,
-        salt=salt
-    )
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to update profile")
-        
-    return {"status": "success", "message": "Profile updated successfully"}
-
-# ==========================================
-# ADMIN ENDPOINTS
-# ==========================================
-
-@app.get("/api/admin/users")
-async def admin_get_users(current_admin: str = Depends(get_current_admin)):
-    try:
-        users = DBStore.get_all_users()
-        return {"status": "success", "users": users}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/admin/create_user")
-async def admin_create_user(req: CreateUserRequest, current_admin: str = Depends(get_current_admin)):
-    username = req.username.strip()
-    password = req.password
-    role = req.role
+@app.on_event("startup")
+async def on_startup():
+    # 1. Initialize SQLite Database Tables & Seeds
+    init_db()
     
-    if not username or len(password) < 6:
-        raise HTTPException(status_code=400, detail="Username cannot be empty and password must be at least 6 characters")
-    if role not in ["admin", "user"]:
-        raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin' or 'user'")
-        
-    if DBStore.get_user(username):
-        raise HTTPException(status_code=400, detail="Username is already taken")
-        
-    salt = generate_salt()
-    hashed = hash_password(password, salt)
-    
-    success = DBStore.create_user(username, hashed, salt, role=role)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to create user account")
-        
-    return {"status": "success", "message": f"User '{username}' created successfully as '{role}'"}
+    # 2. Trigger startup sync task
+    asyncio.create_task(background_yfinance_sync())
 
-@app.put("/api/admin/update_user/{target_username}")
-async def admin_update_user_api(
-    target_username: str,
-    req: AdminUserUpdateRequest,
-    current_admin: str = Depends(get_current_admin)
-):
-    if target_username == current_admin and req.is_active == 0:
-        raise HTTPException(status_code=400, detail="Cannot disable your own admin account")
-        
-    success = DBStore.admin_update_user(
-        username=target_username,
-        role=req.role,
-        email=req.email,
-        name=req.name,
-        phone=req.phone,
-        address=req.address,
-        profile_pic=req.profile_pic,
-        is_active=req.is_active,
-        cash=req.cash
-    )
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to update user details")
-        
-    return {"status": "success", "message": f"User '{target_username}' updated successfully"}
-
-@app.post("/api/admin/toggle_user/{target_username}")
-async def admin_toggle_user(
-    target_username: str,
-    current_admin: str = Depends(get_current_admin)
-):
-    if target_username == current_admin:
-        raise HTTPException(status_code=400, detail="Cannot toggle your own admin account status")
-        
-    user = DBStore.get_user(target_username)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    new_status = 0 if user["is_active"] == 1 else 1
-    
-    import sqlite3
-    conn = sqlite3.connect("trading_platform.db")
-    conn.execute("UPDATE users SET is_active = ? WHERE username = ?", (new_status, target_username))
-    conn.commit()
-    conn.close()
-    
-    status_str = "啟用" if new_status == 1 else "停用"
-    return {"status": "success", "message": f"使用者已{status_str}"}
-
-@app.post("/api/admin/sync_finmind", status_code=202)
-async def admin_sync_finmind(
-    current_admin: str = Depends(get_current_admin)
-):
-    try:
-        logger.info(f"[Sync] Admin '{current_admin}' triggered background FinMind synchronization.")
-        subprocess.Popen([sys.executable, "jobs/sync_finmind.py"])
-        return {"status": "success", "message": "Background synchronization started"}
-    except Exception as e:
-        logger.error(f"[Sync] Failed to start FinMind synchronization subprocess: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start sync: {str(e)}")
-
-@app.delete("/api/admin/delete_user/{target_username}")
-async def admin_delete_user(target_username: str, current_admin: str = Depends(get_current_admin)):
-    if target_username == current_admin:
-        raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
-        
-    user = DBStore.get_user(target_username)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    success = DBStore.delete_user(target_username)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete user account")
-        
-    return {"status": "success", "message": f"User '{target_username}' deleted successfully"}
-
-# ==========================================
-# TRADING & SCREENER ENDPOINTS (PROTECTED)
-# ==========================================
-
-@app.get("/api/screener")
-async def get_screener(current_user: str = Depends(get_current_user)):
-    try:
-        from crawler import sqlite3_connect_helper
-        data = sqlite3_connect_helper()
-        return {"status": "success", "data": data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/screener/filter")
-async def filter_screener(
-    price_min: float = Query(0.0),
-    price_max: float = Query(999999.0),
-    min_volume: int = Query(0),
-    pe_max: float = Query(999999.0),
-    ma_bullish: bool = Query(False),
-    exclude_us: bool = Query(False),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1),
-    current_user: str = Depends(get_current_user)
-):
-    try:
-        filtered_stocks = DBStore.filter_stocks(
-            price_min=price_min,
-            price_max=price_max,
-            min_volume=min_volume,
-            pe_max=pe_max,
-            ma_bullish=ma_bullish,
-            exclude_us=exclude_us
-        )
-        
-        total_count = len(filtered_stocks)
-        total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
-        
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_stocks = filtered_stocks[start_idx:end_idx]
-        
-        return {
-            "status": "success",
-            "stocks": paginated_stocks,
-            "total_pages": total_pages,
-            "current_page": page,
-            "total_count": total_count
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/screener/ace")
-async def ace_screener(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1),
-    current_user: str = Depends(get_current_user)
-):
-    try:
-        # Predefined symbols for Ace Stock Selection mock data
-        ace_symbols = ["2330.TW", "2317.TW", "2454.TW", "2603.TW", "3231.TW"]
-        
-        # Fetch actual stock metadata from DB for these symbols to make sure the app behaves realistically
-        ace_stocks = DBStore.get_stocks_by_symbols(ace_symbols)
-        
-        total_count = len(ace_stocks)
-        total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
-        
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_stocks = ace_stocks[start_idx:end_idx]
-        
-        return {
-            "status": "success",
-            "stocks": paginated_stocks,
-            "total_pages": total_pages,
-            "current_page": page,
-            "total_count": total_count
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/stocks/search")
-async def search_stocks(query: str = Query("", min_length=1), current_user: str = Depends(get_current_user)):
-    try:
-        results = DBStore.search_stocks(query)
-        return {"status": "success", "results": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/kline/{symbol}")
-async def get_kline(symbol: str, interval: str = Query("1d"), current_user: str = Depends(get_current_user)):
-    try:
-        data = crawler.get_kline_data(symbol, interval)
-        return {"status": "success", "symbol": symbol, "interval": interval, "data": data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/inventory")
-async def get_inventory(current_user: str = Depends(get_current_user)):
-    try:
-        user_broker = MockBroker(username=current_user)
-        inventory = user_broker.get_inventory()
-        summary = user_broker.get_account_summary()
-        return {
-            "status": "success",
-            "summary": summary,
-            "positions": inventory
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/order")
-async def place_order(order_req: OrderRequest, current_user: str = Depends(get_current_user)):
-    try:
-        user_broker = MockBroker(username=current_user)
-        order = user_broker.place_order(
-            symbol=order_req.symbol,
-            action=order_req.action,
-            price=order_req.price,
-            qty=order_req.qty,
-            order_type=order_req.order_type
-        )
-        return {"status": "success", "order": order}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/orders")
-async def get_orders(current_user: str = Depends(get_current_user)):
-    try:
-        user_broker = MockBroker(username=current_user)
-        return {"status": "success", "orders": user_broker.orders}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ==========================================
-# WEBSOCKET STREAM ENDPOINT
-# ==========================================
-
+# WebSocket Stream Endpoint
 @app.websocket("/ws/market/{symbol}")
 async def websocket_market_stream(websocket: WebSocket, symbol: str, token: Optional[str] = Query(None)):
     # 1. Verify Query Token
     if not token:
         await websocket.close(code=1008)
         return
+        
     payload = verify_jwt(token, JWT_SECRET)
     if not payload or "sub" not in payload:
-        await websocket.close(code=1008)
-        return
-        
-    import time
-    if "exp" in payload and payload["exp"] < time.time():
         await websocket.close(code=1008)
         return
 
@@ -536,13 +92,9 @@ async def websocket_market_stream(websocket: WebSocket, symbol: str, token: Opti
     
     base_price = 100.0
     try:
-        import sqlite3
-        db_conn = sqlite3.connect("trading_platform.db")
-        db_conn.row_factory = sqlite3.Row
-        row = db_conn.execute("SELECT price FROM stock_metadata WHERE symbol = ?", (symbol,)).fetchone()
-        db_conn.close()
-        if row:
-            base_price = row["price"]
+        res = StockMetadataDao.get_stocks_by_symbols([symbol])
+        if res:
+            base_price = res[0]["price"]
     except Exception:
         pass
 
@@ -557,21 +109,8 @@ async def websocket_market_stream(websocket: WebSocket, symbol: str, token: Opti
     except Exception as e:
         logger.error(f"[WebSocket] Error in market stream for user '{username}', symbol {symbol}: {e}")
 
-# Background Task: Sync yfinance metadata on startup
-async def background_yfinance_sync():
-    logger.info("[Startup] Waiting 3 seconds before initiating background metadata sync...")
-    await asyncio.sleep(3)
-    try:
-        crawler.sync_all_stock_metadata()
-    except Exception as e:
-        logger.error(f"[Startup] Background sync encountered an error: {e}")
-
-@app.on_event("startup")
-async def on_startup():
-    asyncio.create_task(background_yfinance_sync())
-
 # Mount static frontend assets
-frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
+frontend_dir = os.path.abspath(os.path.join(backend_dir, "..", "frontend"))
 
 if os.path.exists(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

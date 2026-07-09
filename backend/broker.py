@@ -3,7 +3,7 @@ import random
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from datetime import datetime
-from logger import logger
+from common.logger import logger
 
 class BrokerGateway(ABC):
     """
@@ -47,7 +47,9 @@ class BrokerGateway(ABC):
         pass
 
 
-from database import DBStore
+from dal.account_dao import AccountDao
+from dal.position_dao import PositionDao
+from dal.order_dao import OrderDao
 
 class MockBroker(BrokerGateway):
     """
@@ -57,14 +59,14 @@ class MockBroker(BrokerGateway):
     def __init__(self, username: str = "admin"):
         self.username = username
         # Sync with database
-        self.cash = DBStore.get_cash(username)
+        self.cash = AccountDao.get_cash(username)
         
         # Load positions from database
         self.positions: Dict[str, Dict[str, Any]] = {}
-        for pos in DBStore.get_positions(username):
+        for pos in PositionDao.get_positions(username):
             self.positions[pos["symbol"]] = pos
 
-        self.orders: List[Dict[str, Any]] = DBStore.get_all_orders(username)
+        self.orders: List[Dict[str, Any]] = OrderDao.get_all_orders(username)
         self.order_counter = 1000 + len(self.orders)
         self.is_logged_in = True
 
@@ -127,7 +129,7 @@ class MockBroker(BrokerGateway):
         }
         
         # Save order to database
-        DBStore.add_order(self.username, order)
+        OrderDao.add_order(self.username, order)
         self.orders.insert(0, order) # Prepend to history
         self._process_execution(order)
         return order
@@ -203,12 +205,12 @@ class MockBroker(BrokerGateway):
                 }
 
         # Update database with new values
-        DBStore.update_cash(self.username, self.cash)
+        AccountDao.update_cash(self.username, self.cash)
         if symbol in self.positions:
             pos = self.positions[symbol]
-            DBStore.update_position(self.username, symbol, name, pos["qty"], pos["buy_price"])
+            PositionDao.update_position(self.username, symbol, name, pos["qty"], pos["buy_price"])
         else:
-            DBStore.update_position(self.username, symbol, name, 0, 0.0)
+            PositionDao.update_position(self.username, symbol, name, 0, 0.0)
 
     def generate_live_market_data(self, symbol: str, base_price: float) -> Dict[str, Any]:
         """

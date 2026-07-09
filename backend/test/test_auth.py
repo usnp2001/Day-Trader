@@ -4,12 +4,12 @@ from fastapi.testclient import TestClient
 import os
 import sys
 
-# Adjust import path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Adjust import path to include parent directory (backend)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from main import app
-from database import DBStore, init_db
-from auth_utils import hash_password, verify_jwt
+from dal.database_init import init_db
+from common.auth_utils import hash_password, verify_jwt
 
 class TestAuthSystem(unittest.TestCase):
     @classmethod

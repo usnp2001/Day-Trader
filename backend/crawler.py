@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from database import DBStore
-from logger import logger
+from dal.stock_metadata_dao import StockMetadataDao
+from common.logger import logger
 
 # Extended list of default watchlist stocks
 DEFAULT_SYMBOLS = [
@@ -101,7 +101,7 @@ class StockCrawler:
         all_twse_stocks = self.scrape_all_taiwan_stocks()
         if all_twse_stocks:
             logger.info(f"[Crawler] Found {len(all_twse_stocks)} listed stocks from TWSE. Pre-seeding database cache...")
-            DBStore.update_stock_metadata(all_twse_stocks)
+            StockMetadataDao.update_stock_metadata(all_twse_stocks)
             
         # 2. Sync high-fidelity details for popular watchlist symbols
         logger.info("[Crawler] Starting detailed yfinance sync for watchlist symbols...")
@@ -160,7 +160,7 @@ class StockCrawler:
                 logger.error(f"[Crawler] Error syncing {symbol}: {e}")
                 
         if updated_stocks:
-            DBStore.update_stock_metadata(updated_stocks)
+            StockMetadataDao.update_stock_metadata(updated_stocks)
             logger.info(f"[Crawler] Sync complete. High-fidelity stats updated for {len(updated_stocks)} popular stocks.")
 
     def _get_name_for_symbol(self, symbol: str) -> str:
