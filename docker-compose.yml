@@ -13,10 +13,13 @@ services:
       - ./backend:/app
       # Mount frontend to the container root so the relative path "../frontend" resolves correctly
       - ./frontend:/frontend
+      # Mount jobs directory for background tasks
+      - ./jobs:/app/jobs
       # Persist SQLite trading database on the host machine
       - db_volume:/app/db
     environment:
       - ENV=development
+      - TZ=Asia/Taipei
     restart: always
 
 volumes:

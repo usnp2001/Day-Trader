@@ -3,8 +3,9 @@ import os
 import requests
 import datetime
 
-# Add backend folder to sys.path to enable imports
+# Add backend folder and parent folder to sys.path to enable imports on both host and docker container
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from dal.stock_metadata_dao import StockMetadataDao
 from common.base_dao import BaseDAO
