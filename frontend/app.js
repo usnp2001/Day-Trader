@@ -183,6 +183,16 @@ function bindEvents() {
         });
     }
 
+    // AI stock selection button listener
+    const btnAi = document.getElementById("btn-ai-screener");
+    if (btnAi) {
+        btnAi.addEventListener("click", () => {
+            state.currentMode = "ai";
+            state.currentPage = 1;
+            fetchStocks();
+        });
+    }
+
     // Pagination Button Listeners
     document.getElementById("btn-prev-page").addEventListener("click", () => {
         if (state.currentPage > 1) {
@@ -210,6 +220,8 @@ async function fetchStocks() {
             page_size: state.pageSize
         });
         url = `${API_BASE_URL}/api/screener/ace?${params.toString()}`;
+    } else if (state.currentMode === "ai") {
+        url = `${API_BASE_URL}/api/screener/ai`;
     } else {
         // Construct URL query parameters
         const params = new URLSearchParams({
@@ -228,7 +240,13 @@ async function fetchStocks() {
     // Update panel title header dynamically based on current mode
     const panelTitle = document.getElementById("panel-title-text");
     if (panelTitle) {
-        panelTitle.innerText = state.currentMode === "ace" ? "符合條件股票清單 (艾斯選股)" : "符合條件股票清單 (自訂篩選)";
+        if (state.currentMode === "ace") {
+            panelTitle.innerText = "符合條件股票清單 (艾斯選股)";
+        } else if (state.currentMode === "ai") {
+            panelTitle.innerText = "符合條件股票清單 (AI預測選股)";
+        } else {
+            panelTitle.innerText = "符合條件股票清單 (自訂篩選)";
+        }
     }
 
     try {
@@ -244,14 +262,19 @@ async function fetchStocks() {
         const json = await res.json();
         
         if (json.status === "success") {
-            state.totalPages = json.total_pages;
-            state.currentPage = json.current_page;
-            
-            document.getElementById("results-count").innerText = `共 ${json.total_count} 筆資料`;
+            if (state.currentMode === "ai") {
+                state.totalPages = 1;
+                state.currentPage = 1;
+                document.getElementById("results-count").innerText = `共 ${json.stocks.length} 筆資料 (AI預測排序)`;
+            } else {
+                state.totalPages = json.total_pages;
+                state.currentPage = json.current_page;
+                document.getElementById("results-count").innerText = `共 ${json.total_count} 筆資料`;
+            }
             renderStockList(json.stocks);
             updatePaginationUI();
         } else {
-            tbody.innerHTML = `<tr><td colspan="15" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.detail}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.detail}</td></tr>`;
         }
     } catch (err) {
         console.error("Fetch request failed:", err);
@@ -284,6 +307,8 @@ function renderStockList(stocks) {
         const marginBal = stock.margin_balance !== null && stock.margin_balance !== undefined ? stock.margin_balance.toLocaleString() : "-";
         const shortBal = stock.short_balance !== null && stock.short_balance !== undefined ? stock.short_balance.toLocaleString() : "-";
         const revYoY = stock.revenue_yoy ? stock.revenue_yoy.toFixed(2) + "%" : "-";
+        const aiProbVal = (stock.ai_prob !== undefined && stock.ai_prob !== null) ? `${stock.ai_prob}%` : "-";
+        const aiProbStyle = stock.ai_prob !== undefined ? "color: #b388ff; font-weight: bold;" : "color: var(--text-secondary);";
 
         tr.innerHTML = `
             <td style="padding: 12px 8px; font-weight:600; font-family: monospace;">${stock.symbol}</td>
@@ -308,6 +333,7 @@ function renderStockList(stocks) {
             <td class="mono" style="text-align: right; color: var(--text-secondary);">${marginBal}</td>
             <td class="mono" style="text-align: right; color: var(--text-secondary);">${shortBal}</td>
             <td class="mono" style="text-align: right; color: var(--text-secondary);">${revYoY}</td>
+            <td class="mono" style="text-align: right; ${aiProbStyle}">${aiProbVal}</td>
             <td style="text-align: center;">
                 <button class="btn-tab" style="background-color: var(--color-accent); color: #fff; border:none; padding: 4px 12px; font-size:11px; border-radius:3px; cursor:pointer;" onclick="openDashboard('${stock.symbol}')">
                     開啟看板
@@ -492,8 +518,39 @@ window.handleSaveProfile = async function(e) {
     }
 };
 
+// Cookie Helpers
+function setCookie(name, value, seconds) {
+    const d = new Date();
+    d.setTime(d.getTime() + (seconds * 1000));
+    document.cookie = `${name}=${value};expires=${d.toUTCString()};path=/`;
+}
+
+function getCookie(name) {
+    const ca = document.cookie.split(';');
+    const nameEQ = `${name}=`;
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i].trim();
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
 window.handleSyncFinMind = async function() {
     const btn = document.getElementById("btn-sync-finmind");
+    
+    // Check Cooldown Cookie
+    const cooldownStart = getCookie("finmind_sync_cooldown");
+    if (cooldownStart) {
+        const elapsed = Math.floor((Date.now() - parseInt(cooldownStart)) / 1000);
+        const remaining = 900 - elapsed; // 15 minutes = 900 seconds
+        if (remaining > 0) {
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            alert(`同步間隔為 15 分鐘！請於 ${minutes} 分 ${seconds} 秒後再試。`);
+            return;
+        }
+    }
+    
     btn.disabled = true;
     btn.textContent = "同步中...";
     
@@ -510,7 +567,9 @@ window.handleSyncFinMind = async function() {
         
         const data = await response.json();
         if (response.ok) {
-            alert("同步任務已啟動！系統已在背景開始自 FinMind 抓取最新數據，預計 30-40 秒完成。請稍候點擊「查詢」重新加載列表。");
+            // Set cooldown start timestamp in cookie (expires in 900 seconds)
+            setCookie("finmind_sync_cooldown", Date.now().toString(), 900);
+            alert("同步任務已啟動！系統已在背景開始自 FinMind 抓取數據。因爲要抓取全市場股票，若您使用的是免費 Token，當達到每小時 600 次上限時，背景任務將會自動儲存已拉取的股票資料並優雅中止。請稍候點擊「查詢」重新加載列表。");
         } else {
             alert(data.detail || "同步任務啟動失敗！");
         }
