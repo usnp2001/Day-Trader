@@ -3,6 +3,7 @@ import random
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from logger import logger
 
 class BrokerGateway(ABC):
     """
@@ -69,7 +70,7 @@ class MockBroker(BrokerGateway):
 
     def login(self, user_id: str, password: str, cert_path: Optional[str] = None, cert_pass: Optional[str] = None) -> bool:
         self.is_logged_in = True
-        print(f"[MockBroker] Logged in user: {user_id}")
+        logger.info(f"[MockBroker] Logged in user: {user_id}")
         return True
 
     def get_inventory(self) -> List[Dict[str, Any]]:
@@ -304,7 +305,7 @@ class EsunFugleBroker(BrokerGateway):
             self.api = TaiwanStockAPI(self.sdk)
             return True
         except Exception as e:
-            print(f"玉山富果登入失敗: {e}")
+            logger.error(f"玉山富果登入失敗: {e}")
             return False
 
     def get_inventory(self):
@@ -369,7 +370,7 @@ class HuaNanBroker(BrokerGateway):
             # self.api.login(user_id=user_id, password=password, cert_path=cert_path, cert_password=cert_pass)
             return True
         except Exception as e:
-            print(f"華南證券登入失敗: {e}")
+            logger.error(f"華南證券登入失敗: {e}")
             return False
 
     def get_inventory(self):

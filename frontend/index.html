@@ -35,6 +35,7 @@
                 <span class="role-badge" id="header-user-role" style="display: none; background: rgba(0, 176, 107, 0.15); color: #00d984; font-size: 10px; padding: 1px 4px; border-radius: 4px; font-weight: bold; border: 1px solid rgba(0, 176, 107, 0.2);">admin</span>
             </div>
             <a href="/admin.html" id="link-admin-panel" style="display: none; color: #00d984; text-decoration: none; font-weight: 600;" class="btn-tab">管理員後台</a>
+            <button id="btn-sync-finmind" style="display: none; background-color: var(--color-up); color: #fff; padding: 4px 12px; font-size: 12px; cursor: pointer; border: none; font-weight: bold;" class="btn-tab">同步 Finmind</button>
             <button onclick="handleLogout()" class="btn-tab" style="padding: 4px 12px; font-size: 12px; cursor: pointer;">登出</button>
         </div>
     </header>
@@ -116,12 +117,20 @@
                             <th style="text-align: right;">今日漲跌幅</th>
                             <th style="text-align: right;">成交量 (股)</th>
                             <th style="text-align: right;">本益比 (倍)</th>
+                            <th style="text-align: right;">淨值比 (PBR)</th>
+                            <th style="text-align: right;">殖利率 (%)</th>
+                            <th style="text-align: right;">外資買超 (股)</th>
+                            <th style="text-align: right;">投信買超 (股)</th>
+                            <th style="text-align: right;">自營商買超 (股)</th>
+                            <th style="text-align: right;">融資餘額 (股)</th>
+                            <th style="text-align: right;">融券餘額 (股)</th>
+                            <th style="text-align: right;">營收年增率 (%)</th>
                             <th style="text-align: center;">操作</th>
                         </tr>
                     </thead>
                     <tbody id="screener-results-tbody">
                         <!-- Populated dynamically by app.js -->
-                        <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">請點擊上方查詢獲取篩選結果...</td></tr>
+                        <tr><td colspan="15" style="text-align: center; color: var(--text-muted); padding: 40px;">請點擊上方查詢獲取篩選結果...</td></tr>
                     </tbody>
                 </table>
             </div>

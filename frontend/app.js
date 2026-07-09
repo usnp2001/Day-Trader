@@ -63,6 +63,11 @@ function initializeHeader() {
         if (adminLink) {
             adminLink.style.display = 'inline-block';
         }
+        const syncBtn = document.getElementById('btn-sync-finmind');
+        if (syncBtn) {
+            syncBtn.style.display = 'inline-block';
+            syncBtn.addEventListener('click', handleSyncFinMind);
+        }
     }
 
     // Fetch user cash to show in header
@@ -246,11 +251,11 @@ async function fetchStocks() {
             renderStockList(json.stocks);
             updatePaginationUI();
         } else {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.detail}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="15" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.detail}</td></tr>`;
         }
     } catch (err) {
         console.error("Fetch request failed:", err);
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--color-up); padding: 40px;">選股伺服器連線失敗！</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="15" style="text-align: center; color: var(--color-up); padding: 40px;">選股伺服器連線失敗！</td></tr>`;
     }
 }
 
@@ -259,7 +264,7 @@ function renderStockList(stocks) {
     tbody.innerHTML = "";
 
     if (stocks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">無符合篩選條件的股票</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="15" style="text-align: center; color: var(--text-muted); padding: 40px;">無符合篩選條件的股票</td></tr>`;
         return;
     }
 
@@ -269,6 +274,16 @@ function renderStockList(stocks) {
         const sign = stock.change > 0 ? "+" : "";
         const colorClass = stock.change > 0 ? "up" : (stock.change < 0 ? "down" : "");
         const peValue = stock.pe_ratio ? stock.pe_ratio.toFixed(1) : "-";
+        
+        // FinMind expanded columns formatting
+        const pbValue = stock.pb_ratio ? stock.pb_ratio.toFixed(2) : "-";
+        const divValue = stock.dividend_yield ? stock.dividend_yield.toFixed(2) + "%" : "-";
+        const foreignNet = stock.foreign_net_buy !== null && stock.foreign_net_buy !== undefined ? stock.foreign_net_buy.toLocaleString() : "-";
+        const trustNet = stock.trust_net_buy !== null && stock.trust_net_buy !== undefined ? stock.trust_net_buy.toLocaleString() : "-";
+        const dealerNet = stock.dealer_net_buy !== null && stock.dealer_net_buy !== undefined ? stock.dealer_net_buy.toLocaleString() : "-";
+        const marginBal = stock.margin_balance !== null && stock.margin_balance !== undefined ? stock.margin_balance.toLocaleString() : "-";
+        const shortBal = stock.short_balance !== null && stock.short_balance !== undefined ? stock.short_balance.toLocaleString() : "-";
+        const revYoY = stock.revenue_yoy ? stock.revenue_yoy.toFixed(2) + "%" : "-";
 
         tr.innerHTML = `
             <td style="padding: 12px 8px; font-weight:600; font-family: monospace;">${stock.symbol}</td>
@@ -285,6 +300,14 @@ function renderStockList(stocks) {
             <td class="mono" style="text-align: right; color: var(--text-secondary);">
                 ${peValue}
             </td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${pbValue}</td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${divValue}</td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${foreignNet}</td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${trustNet}</td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${dealerNet}</td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${marginBal}</td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${shortBal}</td>
+            <td class="mono" style="text-align: right; color: var(--text-secondary);">${revYoY}</td>
             <td style="text-align: center;">
                 <button class="btn-tab" style="background-color: var(--color-accent); color: #fff; border:none; padding: 4px 12px; font-size:11px; border-radius:3px; cursor:pointer;" onclick="openDashboard('${stock.symbol}')">
                     開啟看板
@@ -466,5 +489,35 @@ window.handleSaveProfile = async function(e) {
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '儲存個人資料';
+    }
+};
+
+window.handleSyncFinMind = async function() {
+    const btn = document.getElementById("btn-sync-finmind");
+    btn.disabled = true;
+    btn.textContent = "同步中...";
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/sync_finmind`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        const data = await response.json();
+        if (response.ok) {
+            alert("同步任務已啟動！系統已在背景開始自 FinMind 抓取最新數據，預計 30-40 秒完成。請稍候點擊「查詢」重新加載列表。");
+        } else {
+            alert(data.detail || "同步任務啟動失敗！");
+        }
+    } catch (err) {
+        alert("連線伺服器失敗，無法啟動同步。");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "同步 Finmind";
     }
 };

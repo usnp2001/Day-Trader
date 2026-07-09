@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from typing import Dict, List, Any, Optional
+from logger import logger
 
 DB_FILE = "trading_platform.db"
 
@@ -28,7 +29,7 @@ def init_db():
         needs_migration = True
 
     if needs_migration:
-        print("[Database] Old single-user schema detected. Migrating to multi-user schema...")
+        logger.warning("[Database] Old single-user schema detected. Migrating to multi-user schema...")
         cursor.execute("DROP TABLE IF EXISTS account")
         cursor.execute("DROP TABLE IF EXISTS positions")
         cursor.execute("DROP TABLE IF EXISTS orders")
@@ -120,6 +121,22 @@ def init_db():
         cursor.execute("ALTER TABLE stock_metadata ADD COLUMN stockId INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+
+    # Run database migration to add new stock_metadata columns if they do not exist
+    for col, col_type in [
+        ("pb_ratio", "REAL"),
+        ("dividend_yield", "REAL"),
+        ("foreign_net_buy", "INTEGER"),
+        ("trust_net_buy", "INTEGER"),
+        ("dealer_net_buy", "INTEGER"),
+        ("margin_balance", "INTEGER"),
+        ("short_balance", "INTEGER"),
+        ("revenue_yoy", "REAL")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError:
+            pass # Column already exists
     
     # Remove old 'INTEL' symbol if it exists to clean up
     cursor.execute("DELETE FROM stock_metadata WHERE symbol = 'INTEL'")
@@ -210,7 +227,7 @@ def init_db():
     
     conn.commit()
     conn.close()
-    print("[Database] Schema initialized successfully.")
+    logger.info("[Database] Schema initialized successfully.")
 
 
 class DBStore:
@@ -485,7 +502,8 @@ class DBStore:
         """Query and filter stocks based on technical and fundamental criteria."""
         conn = get_db_connection()
         query = """
-            SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId
+            SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId,
+                   pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy
             FROM stock_metadata
             WHERE price >= ? AND price <= ? AND volume >= ? AND (pe_ratio IS NULL OR pe_ratio <= ?)
         """
@@ -512,7 +530,15 @@ class DBStore:
                 "pe_ratio": r["pe_ratio"],
                 "ma5": r["ma5"],
                 "ma20": r["ma20"],
-                "stockId": r["stockId"]
+                "stockId": r["stockId"],
+                "pb_ratio": r["pb_ratio"],
+                "dividend_yield": r["dividend_yield"],
+                "foreign_net_buy": r["foreign_net_buy"],
+                "trust_net_buy": r["trust_net_buy"],
+                "dealer_net_buy": r["dealer_net_buy"],
+                "margin_balance": r["margin_balance"],
+                "short_balance": r["short_balance"],
+                "revenue_yoy": r["revenue_yoy"]
             })
         return stocks
 
@@ -524,7 +550,8 @@ class DBStore:
         conn = get_db_connection()
         placeholders = ",".join(["?"] * len(symbols))
         query = f"""
-            SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId
+            SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId,
+                   pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy
             FROM stock_metadata
             WHERE symbol IN ({placeholders})
         """
@@ -543,7 +570,15 @@ class DBStore:
                 "pe_ratio": r["pe_ratio"],
                 "ma5": r["ma5"],
                 "ma20": r["ma20"],
-                "stockId": r["stockId"]
+                "stockId": r["stockId"],
+                "pb_ratio": r["pb_ratio"],
+                "dividend_yield": r["dividend_yield"],
+                "foreign_net_buy": r["foreign_net_buy"],
+                "trust_net_buy": r["trust_net_buy"],
+                "dealer_net_buy": r["dealer_net_buy"],
+                "margin_balance": r["margin_balance"],
+                "short_balance": r["short_balance"],
+                "revenue_yoy": r["revenue_yoy"]
             })
         return stocks
 
@@ -567,8 +602,11 @@ class DBStore:
                     stock_id = 0
 
             cursor.execute("""
-                INSERT INTO stock_metadata (symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO stock_metadata (
+                    symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId,
+                    pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(symbol) DO UPDATE SET
                     price=excluded.price,
                     change=excluded.change,
@@ -577,10 +615,20 @@ class DBStore:
                     pe_ratio=COALESCE(excluded.pe_ratio, pe_ratio),
                     ma5=COALESCE(excluded.ma5, ma5),
                     ma20=COALESCE(excluded.ma20, ma20),
-                    stockId=excluded.stockId
+                    stockId=excluded.stockId,
+                    pb_ratio=COALESCE(excluded.pb_ratio, pb_ratio),
+                    dividend_yield=COALESCE(excluded.dividend_yield, dividend_yield),
+                    foreign_net_buy=COALESCE(excluded.foreign_net_buy, foreign_net_buy),
+                    trust_net_buy=COALESCE(excluded.trust_net_buy, trust_net_buy),
+                    dealer_net_buy=COALESCE(excluded.dealer_net_buy, dealer_net_buy),
+                    margin_balance=COALESCE(excluded.margin_balance, margin_balance),
+                    short_balance=COALESCE(excluded.short_balance, short_balance),
+                    revenue_yoy=COALESCE(excluded.revenue_yoy, revenue_yoy)
             """, (
                 s["symbol"], s["name"], s.get("price", 0.0), s.get("change", 0.0), s.get("change_percent", 0.0),
-                s.get("volume", 0), s.get("pe_ratio"), s.get("ma5"), s.get("ma20"), stock_id
+                s.get("volume", 0), s.get("pe_ratio"), s.get("ma5"), s.get("ma20"), stock_id,
+                s.get("pb_ratio"), s.get("dividend_yield"), s.get("foreign_net_buy"), s.get("trust_net_buy"),
+                s.get("dealer_net_buy"), s.get("margin_balance"), s.get("short_balance"), s.get("revenue_yoy")
             ))
         conn.commit()
         conn.close()

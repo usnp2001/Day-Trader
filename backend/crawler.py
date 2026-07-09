@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from database import DBStore
+from logger import logger
 
 # Extended list of default watchlist stocks
 DEFAULT_SYMBOLS = [
@@ -86,7 +87,7 @@ class StockCrawler:
                                     "ma20": base_price
                                 })
             except Exception as e:
-                print(f"[Crawler] Error scraping symbols from {url}: {e}")
+                logger.error(f"[Crawler] Error scraping symbols from {url}: {e}")
         
         return stocks
 
@@ -96,14 +97,14 @@ class StockCrawler:
         and sync yfinance details for popular watchlist symbols.
         """
         # 1. Scrape all TWSE stocks
-        print("[Crawler] Scraping TWSE listed symbols to populate entire market watch list...")
+        logger.info("[Crawler] Scraping TWSE listed symbols to populate entire market watch list...")
         all_twse_stocks = self.scrape_all_taiwan_stocks()
         if all_twse_stocks:
-            print(f"[Crawler] Found {len(all_twse_stocks)} listed stocks from TWSE. Pre-seeding database cache...")
+            logger.info(f"[Crawler] Found {len(all_twse_stocks)} listed stocks from TWSE. Pre-seeding database cache...")
             DBStore.update_stock_metadata(all_twse_stocks)
             
         # 2. Sync high-fidelity details for popular watchlist symbols
-        print("[Crawler] Starting detailed yfinance sync for watchlist symbols...")
+        logger.info("[Crawler] Starting detailed yfinance sync for watchlist symbols...")
         updated_stocks = []
         for symbol in self.symbols:
             try:
@@ -154,13 +155,13 @@ class StockCrawler:
                     "ma5": round(ma5, 2) if ma5 else None,
                     "ma20": round(ma20, 2) if ma20 else None
                 })
-                print(f"[Crawler] Synced {symbol}: Price={last_price:.2f}, PE={pe_ratio}, MA5={ma5:.1f}, MA20={ma20:.1f}")
+                logger.info(f"[Crawler] Synced {symbol}: Price={last_price:.2f}, PE={pe_ratio}, MA5={ma5:.1f}, MA20={ma20:.1f}")
             except Exception as e:
-                print(f"[Crawler] Error syncing {symbol}: {e}")
+                logger.error(f"[Crawler] Error syncing {symbol}: {e}")
                 
         if updated_stocks:
             DBStore.update_stock_metadata(updated_stocks)
-            print(f"[Crawler] Sync complete. High-fidelity stats updated for {len(updated_stocks)} popular stocks.")
+            logger.info(f"[Crawler] Sync complete. High-fidelity stats updated for {len(updated_stocks)} popular stocks.")
 
     def _get_name_for_symbol(self, symbol: str) -> str:
         names = {
@@ -224,7 +225,7 @@ class StockCrawler:
                 })
             return candles
         except Exception as e:
-            print(f"[Crawler] Error fetching K-lines for {symbol} ({interval}): {e}")
+            logger.error(f"[Crawler] Error fetching K-lines for {symbol} ({interval}): {e}")
             return self._generate_mock_history(symbol, interval)
 
     def _generate_mock_history(self, symbol: str, interval: str) -> List[Dict[str, Any]]:

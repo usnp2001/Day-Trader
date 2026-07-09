@@ -9,11 +9,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
+import sys
+import subprocess
 
 from crawler import StockCrawler
 from broker import MockBroker
 from database import DBStore
 from auth_utils import create_jwt, verify_jwt, generate_salt, hash_password
+from logger import logger
 
 app = FastAPI(
     title="Day Trading Web Platform API - Phase 3",
@@ -345,6 +348,18 @@ async def admin_toggle_user(
     status_str = "啟用" if new_status == 1 else "停用"
     return {"status": "success", "message": f"使用者已{status_str}"}
 
+@app.post("/api/admin/sync_finmind", status_code=202)
+async def admin_sync_finmind(
+    current_admin: str = Depends(get_current_admin)
+):
+    try:
+        logger.info(f"[Sync] Admin '{current_admin}' triggered background FinMind synchronization.")
+        subprocess.Popen([sys.executable, "jobs/sync_finmind.py"])
+        return {"status": "success", "message": "Background synchronization started"}
+    except Exception as e:
+        logger.error(f"[Sync] Failed to start FinMind synchronization subprocess: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start sync: {str(e)}")
+
 @app.delete("/api/admin/delete_user/{target_username}")
 async def admin_delete_user(target_username: str, current_admin: str = Depends(get_current_admin)):
     if target_username == current_admin:
@@ -517,7 +532,7 @@ async def websocket_market_stream(websocket: WebSocket, symbol: str, token: Opti
 
     username = payload["sub"]
     await websocket.accept()
-    print(f"[WebSocket] Connected user '{username}' to market stream: {symbol}")
+    logger.info(f"[WebSocket] Connected user '{username}' to market stream: {symbol}")
     
     base_price = 100.0
     try:
@@ -538,18 +553,18 @@ async def websocket_market_stream(websocket: WebSocket, symbol: str, token: Opti
             await websocket.send_json(market_data)
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:
-        print(f"[WebSocket] Disconnected user '{username}' from market stream: {symbol}")
+        logger.info(f"[WebSocket] Disconnected user '{username}' from market stream: {symbol}")
     except Exception as e:
-        print(f"[WebSocket] Error in market stream for user '{username}', symbol {symbol}: {e}")
+        logger.error(f"[WebSocket] Error in market stream for user '{username}', symbol {symbol}: {e}")
 
 # Background Task: Sync yfinance metadata on startup
 async def background_yfinance_sync():
-    print("[Startup] Waiting 3 seconds before initiating background metadata sync...")
+    logger.info("[Startup] Waiting 3 seconds before initiating background metadata sync...")
     await asyncio.sleep(3)
     try:
         crawler.sync_all_stock_metadata()
     except Exception as e:
-        print(f"[Startup] Background sync encountered an error: {e}")
+        logger.error(f"[Startup] Background sync encountered an error: {e}")
 
 @app.on_event("startup")
 async def on_startup():
@@ -560,9 +575,9 @@ frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fr
 
 if os.path.exists(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
-    print(f"[Static] Mounted frontend files from: {frontend_dir}")
+    logger.info(f"[Static] Mounted frontend files from: {frontend_dir}")
 else:
-    print(f"[Warning] Frontend directory not found at: {frontend_dir}")
+    logger.warning(f"[Warning] Frontend directory not found at: {frontend_dir}")
 
 if __name__ == "__main__":
     import uvicorn
