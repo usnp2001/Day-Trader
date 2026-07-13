@@ -68,6 +68,16 @@ function initializeHeader() {
             syncBtn.style.display = 'inline-block';
             syncBtn.addEventListener('click', handleSyncFinMind);
         }
+        const syncYfBtn = document.getElementById('btn-sync-yfinance');
+        if (syncYfBtn) {
+            syncYfBtn.style.display = 'inline-block';
+            syncYfBtn.addEventListener('click', handleSyncYFinance);
+        }
+        const syncOfficialBtn = document.getElementById('btn-sync-official');
+        if (syncOfficialBtn) {
+            syncOfficialBtn.style.display = 'inline-block';
+            syncOfficialBtn.addEventListener('click', handleSyncOfficial);
+        }
     }
 
     // Fetch user cash to show in header
@@ -334,6 +344,7 @@ function renderStockList(stocks) {
             <td class="mono" style="text-align: right; color: var(--text-secondary);">${shortBal}</td>
             <td class="mono" style="text-align: right; color: var(--text-secondary);">${revYoY}</td>
             <td class="mono" style="text-align: right; ${aiProbStyle}">${aiProbVal}</td>
+            <td class="mono" style="text-align: right; color: var(--text-muted); font-size: 11px; white-space: nowrap;">${stock.updateDate || "-"}</td>
             <td style="text-align: center;">
                 <button class="btn-tab" style="background-color: var(--color-accent); color: #fff; border:none; padding: 4px 12px; font-size:11px; border-radius:3px; cursor:pointer;" onclick="openDashboard('${stock.symbol}')">
                     開啟看板
@@ -580,3 +591,96 @@ window.handleSyncFinMind = async function() {
         btn.textContent = "同步 Finmind";
     }
 };
+
+window.handleSyncYFinance = async function() {
+    const btn = document.getElementById("btn-sync-yfinance");
+    
+    // Check Cooldown Cookie
+    const cooldownStart = getCookie("yfinance_sync_cooldown");
+    if (cooldownStart) {
+        const elapsed = Math.floor((Date.now() - parseInt(cooldownStart)) / 1000);
+        const remaining = 900 - elapsed; // 15 minutes = 900 seconds
+        if (remaining > 0) {
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            alert(`同步間隔為 15 分鐘！請於 ${minutes} 分 ${seconds} 秒後再試。`);
+            return;
+        }
+    }
+    
+    btn.disabled = true;
+    btn.textContent = "同步中...";
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/sync_yfinance`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        const data = await response.json();
+        if (response.ok) {
+            // Set cooldown start timestamp in cookie (expires in 900 seconds)
+            setCookie("yfinance_sync_cooldown", Date.now().toString(), 900);
+            alert("yFinance 同步任務已啟動！系統已在背景開始抓取基本面數據（包含本益比、淨值比、殖利率、ROE 及營收成長率）。請稍候點擊「查詢」重新加載列表。");
+        } else {
+            alert(data.detail || "同步任務啟動失敗！");
+        }
+    } catch (err) {
+        alert("連線伺服器失敗，無法啟動同步。");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "同步 yFinance";
+    }
+};
+
+window.handleSyncOfficial = async function() {
+    const btn = document.getElementById("btn-sync-official");
+    
+    // Check Cooldown Cookie
+    const cooldownStart = getCookie("official_sync_cooldown");
+    if (cooldownStart) {
+        const elapsed = Math.floor((Date.now() - parseInt(cooldownStart)) / 1000);
+        const remaining = 900 - elapsed; // 15 minutes = 900 seconds
+        if (remaining > 0) {
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            alert(`官方數據同步間隔為 15 分鐘！請於 ${minutes} 分 ${seconds} 秒後再試。`);
+            return;
+        }
+    }
+    
+    btn.disabled = true;
+    btn.textContent = "同步中...";
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/sync_official`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        const data = await response.json();
+        if (response.ok) {
+            // Set cooldown start timestamp in cookie (expires in 900 seconds)
+            setCookie("official_sync_cooldown", Date.now().toString(), 900);
+            alert("官方數據同步任務已啟動！系統已在背景開始自 TWSE 與 TPEx 官方網站抓取最新的大數據，並整合 yFinance 熱門股基本面。這是一個 100% 免費且不受限制的同步通道。請稍候點擊「查詢」重新加載列表。");
+        } else {
+            alert(data.detail || "官方數據同步任務啟動失敗！");
+        }
+    } catch (err) {
+        alert("連線伺服器失敗，無法啟動同步。");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "同步官方數據";
+    }
+};
+

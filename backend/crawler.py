@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from dal.stock_metadata_dao import StockMetadataDao
 from common.logger import logger
+from common.config import DB_FILE
 
 # Extended list of default watchlist stocks
 DEFAULT_SYMBOLS = [
@@ -291,7 +292,7 @@ class StockCrawler:
 
 def sqlite3_connect_helper() -> List[Dict[str, Any]]:
     """Helper to query all cached stock metadata directly from SQLite."""
-    conn = sqlite3.connect("trading_platform.db")
+    conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     rows = conn.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, stockId FROM stock_metadata").fetchall()
     conn.close()

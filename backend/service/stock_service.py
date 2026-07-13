@@ -82,13 +82,45 @@ class StockService:
         return cls._crawler_instance.get_kline_data(symbol, interval)
 
     @classmethod
+    def _get_job_path(cls, job_filename: str) -> str:
+        import os
+        # If running inside Docker (where /app/jobs exists)
+        if os.path.exists("/app/jobs"):
+            return os.path.abspath(os.path.join("/app", "jobs", job_filename))
+        # If running on Host (jobs folder is sibling to backend folder)
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "jobs", job_filename))
+
+    @classmethod
     def trigger_finmind_sync(cls, current_admin: str):
         try:
             logger.info(f"[Sync] Admin '{current_admin}' triggered background FinMind synchronization.")
-            subprocess.Popen([sys.executable, "jobs/sync_finmind.py"])
+            job_path = cls._get_job_path("sync_finmind.py")
+            subprocess.Popen([sys.executable, job_path])
             return {"status": "success", "message": "Background synchronization started"}
         except Exception as e:
             logger.error(f"[Sync] Failed to start FinMind synchronization subprocess: {e}")
+            raise ServiceException(f"Failed to start sync: {str(e)}", status_code=500)
+
+    @classmethod
+    def trigger_yfinance_sync(cls, current_admin: str):
+        try:
+            logger.info(f"[Sync] Admin '{current_admin}' triggered background yFinance synchronization.")
+            job_path = cls._get_job_path("sync_yfinance.py")
+            subprocess.Popen([sys.executable, job_path])
+            return {"status": "success", "message": "Background yFinance synchronization started"}
+        except Exception as e:
+            logger.error(f"[Sync] Failed to start yFinance synchronization subprocess: {e}")
+            raise ServiceException(f"Failed to start sync: {str(e)}", status_code=500)
+
+    @classmethod
+    def trigger_official_sync(cls, current_admin: str):
+        try:
+            logger.info(f"[Sync] Admin '{current_admin}' triggered background Official Open Data synchronization.")
+            job_path = cls._get_job_path("sync_official.py")
+            subprocess.Popen([sys.executable, job_path])
+            return {"status": "success", "message": "Background Official Open Data synchronization started"}
+        except Exception as e:
+            logger.error(f"[Sync] Failed to start Official Open Data synchronization subprocess: {e}")
             raise ServiceException(f"Failed to start sync: {str(e)}", status_code=500)
 
     @classmethod
@@ -128,12 +160,17 @@ class StockService:
         except Exception as e:
             raise ServiceException(f"無法載入模型檔案: {str(e)}", status_code=500)
             
-        # 3. Get all watchlist stocks from DB
-        watchlist_symbols = [
-            "2330.TW", "2317.TW", "2454.TW", "2603.TW", "2609.TW",
-            "3231.TW", "2382.TW", "2618.TW", "2002.TW", "2881.TW",
-            "2882.TW", "2303.TW", "2308.TW", "2891.TW", "2610.TW"
-        ]
+        # 3. Get top 50 volume stocks from DB (excluding US stocks, only TW)
+        conn = StockMetadataDao.get_connection()
+        rows = conn.execute("""
+            SELECT symbol FROM stock_metadata
+            WHERE symbol LIKE '%.TW' OR symbol LIKE '%.TWO'
+            ORDER BY volume DESC
+            LIMIT 50
+        """).fetchall()
+        conn.close()
+        
+        watchlist_symbols = [r["symbol"] for r in rows]
         db_stocks = StockMetadataDao.get_stocks_by_symbols(watchlist_symbols)
         if not db_stocks:
             raise ServiceException("資料庫中無自選股資料，請先執行同步！", status_code=400)

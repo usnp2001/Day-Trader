@@ -1,10 +1,10 @@
 ========================================================================
-             當沖看盤選股交易平台 - SQLite 資料庫結構與欄位資訊 (Phase 3)
+             當沖看盤選股交易平台 - SQLite 資料庫結構與欄位資訊 (Phase 4)
 ========================================================================
 
 本系統採用 SQLite 作為本機資料儲存庫（檔案名稱為 trading_platform.db）。
 資料庫內共包含 5 張資料表，全面支援多使用者模擬帳戶（Option B 隔離）、JWT 身份認證、
-角色分工（管理者與一般使用者）以及可用資金動態調整。
+角色分工（管理者與一般使用者）、可用資金動態調整以及 FinMind 與 yfinance 混合大數據評價選股。
 
 以下為各張資料表的詳細用途說明與 Schema 欄位規格：
 
@@ -89,21 +89,31 @@
 ------------------------------------------------------------------------
 ● 用途說明：
   此表為全系統的快取快顯中心，在多使用者下為共享資源（不隔離）。
-  首頁的多條件選股篩選器與看板的 Autocomplete 模糊搜尋功能，皆直接查詢此快取表，
-  以保證毫秒級的回應速度。
+  首頁的多條件選股篩選器與看板的 Autocomplete 模糊搜尋功能，皆直接查詢此快取表。
+  本階段結合 FinMind 籌碼大數據與 yfinance 多因子評價指標，大幅擴展了評價與基本面維度。
 
 ● 欄位資訊：
-  ┌────────────────┬─────────┬─────────────┬──────────────────────────┐
-  │ 欄位名稱       │  型態   │   主鍵/條件 │ 欄位說明                 │
-  ├────────────────┼─────────┼─────────────┼──────────────────────────┤
+  ┌────────────────┬─────────┬─────────────┬────────────────────────────────┐
+  │ 欄位名稱       │  型態   │   主鍵/條件 │ 欄位說明                       │
+  ├────────────────┼─────────┼─────────────┼────────────────────────────────┤
   │ symbol         │ TEXT    │ PRIMARY KEY │ 股票代碼（如 2330.TW, 5347.TWO）│
   │ name           │ TEXT    │ NOT NULL    │ 公司簡稱（如 台積電, Intel）    │
-  │ price          │ REAL    │ NOT NULL    │ 當前收盤價/最新報價      │
-  │ change         │ REAL    │ NOT NULL    │ 今日漲跌價差             │
-  │ change_percent │ REAL    │ NOT NULL    │ 今日漲跌幅 (%)           │
-  │ volume         │ INTEGER │ NOT NULL    │ 最新單日成交量（股數）   │
-  │ pe_ratio       │ REAL    │ DEFAULT NULL│ 本益比（可能為 NULL）    │
-  │ ma5            │ REAL    │ DEFAULT NULL│ 5日移動平均價（可為 NULL）│
-  │ ma20           │ REAL    │ DEFAULT NULL│ 20日移動平均價（可為 NULL）│
-  │ stockId        │ INTEGER │ DEFAULT 0   │ 股票代號數值（台股如 2330，美股為 0）│
-  └────────────────┬─────────┬─────────────┬──────────────────────────┘
+  │ price          │ REAL    │ NOT NULL    │ 當前收盤價/最新報價            │
+  │ change         │ REAL    │ NOT NULL    │ 今日漲跌價差                   │
+  │ change_percent │ REAL    │ NOT NULL    │ 今日漲跌幅 (%)                 │
+  │ volume         │ INTEGER │ NOT NULL    │ 最新單日成交量（股數）         │
+  │ pe_ratio       │ REAL    │ DEFAULT NULL│ 本益比（可能為 NULL）          │
+  │ ma5            │ REAL    │ DEFAULT NULL│ 5日移動平均價（可為 NULL）      │
+  │ ma20           │ REAL    │ DEFAULT NULL│ 20日移動平均價（可為 NULL）     │
+  │ stockId        │ INTEGER │ DEFAULT 0   │ 股票代號數值（台股如 2330，美股 0）│
+  │ pb_ratio       │ REAL    │ DEFAULT NULL│ 股價淨值比 PBR                 │
+  │ dividend_yield │ REAL    │ DEFAULT NULL│ 現金股利殖利率 (%)             │
+  │ foreign_net_buy│ INTEGER │ DEFAULT 0   │ 外資單日買賣超（股數）         │
+  │ trust_net_buy  │ INTEGER │ DEFAULT 0   │ 投信單日買賣超（股數）         │
+  │ dealer_net_buy │ INTEGER │ DEFAULT 0   │ 自營商單日買賣超（股數）       │
+  │ margin_balance │ INTEGER │ DEFAULT 0   │ 融資當日餘額（張數）           │
+  │ short_balance  │ INTEGER │ DEFAULT 0   │ 融券當日餘額（張數）           │
+  │ revenue_yoy    │ REAL    │ DEFAULT NULL│ 月營收年增率 YoY (%)           │
+  │ roe            │ REAL    │ DEFAULT NULL│ 股東權益報酬率 ROE (%)          │
+  │ revenue_growth │ REAL    │ DEFAULT NULL│ 營收年增率 (%)                 │
+  └────────────────┬─────────┬─────────────┬────────────────────────────────┘

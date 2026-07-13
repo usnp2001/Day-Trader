@@ -36,6 +36,8 @@
             </div>
             <a href="/admin.html" id="link-admin-panel" style="display: none; color: #00d984; text-decoration: none; font-weight: 600;" class="btn-tab">管理員後台</a>
             <button id="btn-sync-finmind" style="display: none; background-color: var(--color-up); color: #fff; padding: 4px 12px; font-size: 12px; cursor: pointer; border: none; font-weight: bold;" class="btn-tab">同步 Finmind</button>
+            <button id="btn-sync-yfinance" style="display: none; background-color: #0088cc; color: #fff; padding: 4px 12px; font-size: 12px; cursor: pointer; border: none; font-weight: bold;" class="btn-tab">同步 yFinance</button>
+            <button id="btn-sync-official" style="display: none; background-color: #7a43b6; color: #fff; padding: 4px 12px; font-size: 12px; cursor: pointer; border: none; font-weight: bold;" class="btn-tab">同步官方數據</button>
             <button onclick="handleLogout()" class="btn-tab" style="padding: 4px 12px; font-size: 12px; cursor: pointer;">登出</button>
         </div>
     </header>
@@ -129,12 +131,13 @@
                             <th style="text-align: right;">融券餘額 (股)</th>
                             <th style="text-align: right;">營收年增率 (%)</th>
                             <th style="text-align: right; color: #b388ff; font-weight: bold;">AI 上漲機率</th>
+                            <th style="text-align: right;">更新時間</th>
                             <th style="text-align: center;">操作</th>
                         </tr>
                     </thead>
                     <tbody id="screener-results-tbody">
                         <!-- Populated dynamically by app.js -->
-                        <tr><td colspan="15" style="text-align: center; color: var(--text-muted); padding: 40px;">請點擊上方查詢獲取篩選結果...</td></tr>
+                        <tr><td colspan="16" style="text-align: center; color: var(--text-muted); padding: 40px;">請點擊上方查詢獲取篩選結果...</td></tr>
                     </tbody>
                 </table>
             </div>

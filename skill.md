@@ -1,4 +1,4 @@
-# 當沖看盤與選股交易平台 - 系統功能與技術技能清單 (Phase 3)
+# 當沖看盤與選股交易平台 - 系統功能與技術技能清單 (Phase 4)
 
 本文件詳述本交易平台（Antigravity Day-Trader）所具備的各項前/後端功能、API 規格、運算邏輯與部署技能，供日後維護與擴充快查使用。
 
@@ -27,10 +27,11 @@
 - 支援伺服器端分頁，並透過按鈕狀態變更與不透明度控制防範重複或無效請求。
 - 表格雙擊或點擊「開啟看板」按鈕，可使用 `_blank` 另開瀏覽器頁籤進入個股看板。
 
-### 4. 身份認證與帳戶管理前端互動
+### 4. 身份認證、帳戶管理與同步按鈕前端互動
 - **哨兵權限防護 (Sync Auth Guard)**：首頁與看板頁在網頁載入的最前端進行同步 `localStorage` Token 判定，若無 Token 則強行退回登入頁。
 - **管理者控制面板 (Admin Portal)**：為擁有 `admin` 角色之帳戶顯示「管理者後台」連結，進入 `admin.html` 後可檢視全站註冊帳戶列表與即時開立/刪除帳戶。
 - **資金餘額自由修改 (Cash Editor)**：在首頁與看盤頁右上角設計「✏️」修改可用餘額，透過 Prompt 接收調整，即時與後端同步並更新 UI 資產負債指標。
+- **同步 Finmind 按鈕**：前端首頁導覽列新增「同步 Finmind」按鈕（僅 admin 可見），點擊後向 API 送出 POST 請求發起異步同步任務，並附帶 15 分鐘冷卻防刷限制。
 
 ---
 
@@ -43,6 +44,7 @@
 - `GET /api/admin/users`：列出全站註冊帳戶、角色與現金（僅限 admin 角色存取）。
 - `POST /api/admin/create_user`：管理者開立特定角色（admin/user）帳戶。
 - `DELETE /api/admin/delete_user/{target_username}`：管理者刪除特定帳戶。
+- `POST /api/admin/sync_finmind` : 觸發背景混合數據庫同步任務（僅 admin 權限，回傳 202 已受理）。
 
 ### 2. 交易與選股 APIs (Protected REST APIs)
 *以下端點均掛載 `get_current_user` 路由守衛，要求傳遞 `Authorization: Bearer <token>`：*
@@ -67,23 +69,26 @@
   - `account`：紀錄各用戶可用現金餘額（預設一千萬 NTD，支援動態編輯）。
   - `positions`：持久化庫存部位（以 username + symbol 複合主鍵隔離），買進/賣出/平倉時自動重算，qty=0 時自動清除。
   - `orders`：紀錄成交回報詳情（依 username 進行多用戶資料隔離）。
-  - `stock_metadata`：常用篩選快取表，儲存股票基本面與均線資料。
+  - `stock_metadata`：常用篩選快取表，除儲存量價數據外，本階段已全面擴展 **10 大基本與評價指標** (PBR、殖利率、三大法人、融資券、月營收YoY，以及由 yfinance enriched 的 ROE 與營收成長率)。
 - **資料庫欄位結構文件**：
   - [database_schema.txt](file:///d:/python/stock/database_schema.txt) 說明資料庫各資料表與欄位型態、條件限制的技術文檔。
 - **自研 JWT 與密碼加鹽雜湊 (auth_utils.py)**：
   - 整合 Python 標準庫 `hmac` 和 `hashlib`。使用 SHA-256 對結合 UUID salt 的密碼進行加鹽雜湊，JWT 使用 HS256 (HMAC-SHA256) 進行簽章防偽。
 - **快取同步與爬蟲**：
   - [crawler.py](file:///d:/python/stock/backend/crawler.py) 整合 `yfinance`，在伺服器 boot 啟動 3 秒後開啟背景排程，爬取台灣上市（TWSE, `.TW`）與上櫃（TPEx, `.TWO`）所有股票代碼，滾動計算當前 MA5、MA20 均線值，回寫至 SQLite 快取，克服線上即時爬蟲過慢的問題。
+- **FinMind & yfinance 混合異步同步排程器 (sync_finmind.py)**：
+  - 實作能單獨執行之排程程式 (`python backend/jobs/sync_finmind.py`)。
+  - 採用**全市場批量下載**技術大幅減少 FinMind API 耗用（1 次 API 可拉取全台股 PBR/PE/Yield 數據），對三大法人買賣超與融資券進行自動掃描回溯。
+  - 利用 `yfinance` 彌補美股基本面缺失，並對熱門自選台股動態追加 `ROE` 及 `Revenue Growth` 欄位寫入。
 
 ---
 
 ## 🐳 運維與部署技能 (DevOps & GCP)
 
+- **三層架構重構 (Three-Tier MVC Architecture)**：
+  - 全站程式碼已全面重構為 MVC 架構，分為共通模組 (`common`)、資料存取層 (`dal`)、商業邏輯層 (`service`)、以及控制器層 (`controller`)。日誌模組 (`common/logger.py`) 統一接管控制台與實體檔案寫入 (`/logs/trading_platform.log`)。
 - **Docker 虛擬化**：封裝 [Dockerfile](file:///d:/python/stock/backend/Dockerfile) 輕量運行環境，透過 [docker-compose.yml](file:///d:/python/stock/docker-compose.yml) 綁定靜態網站映射（`/frontend`）與 SQLite 實體資料卷持久化。
 - **GCP 最省部署 ( GCE Single-VM Scheme)**：
   - 於 Compute Engine 開設免費額度 `e2-micro` 或 `e2-small` 主機。
   - 架設 **Nginx** 反向代理與防護，處理 Port 80 轉向 HTTPS，並配置 WebSocket `Upgrade` 轉發頭。
   - 使用 **Certbot (Let's Encrypt)** 支援安全的 `wss://` 連線。
-- **微服務模式演進（預留架構）**：
-  - 前端與後端靜態文件解耦，可單獨上傳 GCP Cloud Storage 靜態託管 + Cloud CDN。
-  - API Gateway 集中管理入口，下單服務與行情服務可拆分為獨立的 Cloud Run 容器。

@@ -109,7 +109,8 @@ def init_db():
             pe_ratio REAL,
             ma5 REAL,
             ma20 REAL,
-            stockId INTEGER DEFAULT 0
+            stockId INTEGER DEFAULT 0,
+            updateDate TEXT
         )
     """)
     
@@ -119,7 +120,7 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
-    # Run stock metadata migrations for the 8 new columns
+    # Run stock metadata migrations for the 11 new columns
     for col, col_type in [
         ("pb_ratio", "REAL"),
         ("dividend_yield", "REAL"),
@@ -128,7 +129,10 @@ def init_db():
         ("dealer_net_buy", "INTEGER"),
         ("margin_balance", "INTEGER"),
         ("short_balance", "INTEGER"),
-        ("revenue_yoy", "REAL")
+        ("revenue_yoy", "REAL"),
+        ("roe", "REAL"),
+        ("revenue_growth", "REAL"),
+        ("updateDate", "TEXT")
     ]:
         try:
             cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col} {col_type}")

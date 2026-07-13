@@ -52,6 +52,14 @@ async def get_kline(symbol: str, interval: str = Query("1d"), current_user: str 
 async def admin_sync_finmind(current_admin: str = Depends(get_current_admin)):
     return StockService.trigger_finmind_sync(current_admin)
 
+@router.post("/admin/sync_yfinance", status_code=202)
+async def admin_sync_yfinance(current_admin: str = Depends(get_current_admin)):
+    return StockService.trigger_yfinance_sync(current_admin)
+
+@router.post("/admin/sync_official", status_code=202)
+async def admin_sync_official(current_admin: str = Depends(get_current_admin)):
+    return StockService.trigger_official_sync(current_admin)
+
 @router.get("/screener/ai")
 async def ai_screener(current_user: str = Depends(get_current_user)):
     return StockService.get_ai_predictions()

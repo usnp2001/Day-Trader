@@ -221,3 +221,4 @@ __marimo__/
 
 backend/trading_platform.db
 *.db
+jobs/ml_stock_dataset.csv

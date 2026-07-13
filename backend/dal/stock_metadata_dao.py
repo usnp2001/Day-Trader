@@ -29,7 +29,8 @@ class StockMetadataDao(BaseDAO):
         conn = cls.get_connection()
         query = """
             SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId,
-                   pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy
+                   pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy,
+                   roe, revenue_growth, updateDate
             FROM stock_metadata
             WHERE price >= ? AND price <= ? AND volume >= ? AND (pe_ratio IS NULL OR pe_ratio <= ?)
         """
@@ -64,7 +65,10 @@ class StockMetadataDao(BaseDAO):
                 "dealer_net_buy": r["dealer_net_buy"],
                 "margin_balance": r["margin_balance"],
                 "short_balance": r["short_balance"],
-                "revenue_yoy": r["revenue_yoy"]
+                "revenue_yoy": r["revenue_yoy"],
+                "roe": r["roe"],
+                "revenue_growth": r["revenue_growth"],
+                "updateDate": r["updateDate"]
             })
         return stocks
 
@@ -77,7 +81,8 @@ class StockMetadataDao(BaseDAO):
         placeholders = ",".join(["?"] * len(symbols))
         query = f"""
             SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId,
-                   pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy
+                   pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy,
+                   roe, revenue_growth, updateDate
             FROM stock_metadata
             WHERE symbol IN ({placeholders})
         """
@@ -104,15 +109,21 @@ class StockMetadataDao(BaseDAO):
                 "dealer_net_buy": r["dealer_net_buy"],
                 "margin_balance": r["margin_balance"],
                 "short_balance": r["short_balance"],
-                "revenue_yoy": r["revenue_yoy"]
+                "revenue_yoy": r["revenue_yoy"],
+                "roe": r["roe"],
+                "revenue_growth": r["revenue_growth"],
+                "updateDate": r["updateDate"]
             })
         return stocks
 
     @classmethod
     def update_stock_metadata(cls, stocks_list: List[Dict[str, Any]]):
         """Updates or inserts stock details in bulk (used by backend crawlers)."""
+        import datetime
         conn = cls.get_connection()
         cursor = conn.cursor()
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         for s in stocks_list:
             symbol = s["symbol"]
             # Dynamically compute stockId if not provided
@@ -127,12 +138,16 @@ class StockMetadataDao(BaseDAO):
                 else:
                     stock_id = 0
 
+            # Override updateDate if provided in s, otherwise use current time
+            s_update_time = s.get("updateDate") or current_time
+
             cursor.execute("""
                 INSERT INTO stock_metadata (
                     symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId,
-                    pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy
+                    pb_ratio, dividend_yield, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance, revenue_yoy,
+                    roe, revenue_growth, updateDate
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(symbol) DO UPDATE SET
                     price=excluded.price,
                     change=excluded.change,
@@ -149,12 +164,16 @@ class StockMetadataDao(BaseDAO):
                     dealer_net_buy=COALESCE(excluded.dealer_net_buy, dealer_net_buy),
                     margin_balance=COALESCE(excluded.margin_balance, margin_balance),
                     short_balance=COALESCE(excluded.short_balance, short_balance),
-                    revenue_yoy=COALESCE(excluded.revenue_yoy, revenue_yoy)
+                    revenue_yoy=COALESCE(excluded.revenue_yoy, revenue_yoy),
+                    roe=COALESCE(excluded.roe, roe),
+                    revenue_growth=COALESCE(excluded.revenue_growth, revenue_growth),
+                    updateDate=excluded.updateDate
             """, (
                 s["symbol"], s["name"], s.get("price", 0.0), s.get("change", 0.0), s.get("change_percent", 0.0),
                 s.get("volume", 0), s.get("pe_ratio"), s.get("ma5"), s.get("ma20"), stock_id,
                 s.get("pb_ratio"), s.get("dividend_yield"), s.get("foreign_net_buy"), s.get("trust_net_buy"),
-                s.get("dealer_net_buy"), s.get("margin_balance"), s.get("short_balance"), s.get("revenue_yoy")
+                s.get("dealer_net_buy"), s.get("margin_balance"), s.get("short_balance"), s.get("revenue_yoy"),
+                s.get("roe"), s.get("revenue_growth"), s_update_time
             ))
         conn.commit()
         conn.close()
