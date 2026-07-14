@@ -1,13 +1,12 @@
-import sqlite3
 import os
 import hashlib
 import uuid
-from common.config import DB_FILE
 from common.logger import logger
+from common.base_dao import BaseDAO, OperationalError, DatabaseError
 
 def init_db():
     """Initializes the database schema and seeds default data if tables are empty."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     
     # Check if migration is needed from old single-user schema
@@ -16,14 +15,22 @@ def init_db():
         # Check if old table structure exists
         cursor.execute("SELECT 1 FROM account LIMIT 1")
         table_exists = True
-    except sqlite3.OperationalError:
+    except DatabaseError:
         table_exists = False
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
     try:
         if table_exists:
             cursor.execute("SELECT username FROM account LIMIT 1")
-    except sqlite3.OperationalError:
+    except DatabaseError:
         needs_migration = True
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
     if needs_migration:
         logger.warning("[Database] Old single-user schema detected. Migrating to multi-user schema...")
@@ -46,6 +53,7 @@ def init_db():
             is_active INTEGER DEFAULT 1
         )
     """)
+    conn.commit()
     
     # Run user migrations
     for col, col_type in [
@@ -58,8 +66,12 @@ def init_db():
     ]:
         try:
             cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except DatabaseError:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
     # 2. Account table
     cursor.execute("""
@@ -68,6 +80,7 @@ def init_db():
             cash REAL NOT NULL
         )
     """)
+    conn.commit()
     
     # 3. Positions table
     cursor.execute("""
@@ -80,6 +93,7 @@ def init_db():
             PRIMARY KEY (username, symbol)
         )
     """)
+    conn.commit()
 
     # 4. Orders table
     cursor.execute("""
@@ -96,6 +110,7 @@ def init_db():
             timestamp TEXT NOT NULL
         )
     """)
+    conn.commit()
 
     # 5. Stock Metadata cache table
     cursor.execute("""
@@ -113,12 +128,18 @@ def init_db():
             updateDate TEXT
         )
     """)
+    conn.commit()
     
     # stockId migration
     try:
         cursor.execute("ALTER TABLE stock_metadata ADD COLUMN stockId INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+        conn.commit()
+    except DatabaseError as e:
+        logger.debug(f"[Database] Migration note for stockId: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
     # Run stock metadata migrations for the 11 new columns
     for col, col_type in [
@@ -136,8 +157,13 @@ def init_db():
     ]:
         try:
             cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col} {col_type}")
-        except sqlite3.OperationalError:
-            pass
+            conn.commit()
+        except DatabaseError as e:
+            logger.warning(f"[Database] Migration failed for column {col}: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
     
     # Remove old 'INTEL' symbol
     cursor.execute("DELETE FROM stock_metadata WHERE symbol = 'INTEL'")

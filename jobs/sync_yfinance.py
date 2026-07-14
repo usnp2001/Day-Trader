@@ -1,7 +1,6 @@
 import sys
 import os
 import datetime
-import sqlite3
 import yfinance as yf
 
 # Add parent directory to sys.path to resolve backend package imports
@@ -15,7 +14,8 @@ if backend_dir not in sys.path:
 
 from dal.stock_metadata_dao import StockMetadataDao
 from common.logger import logger
-from common.config import DB_FILE
+from common.config import DB_TYPE, DB_FILE
+from common.base_dao import BaseDAO, OperationalError, DatabaseError
 
 # Popular watchlist symbols to query yfinance for detailed fundamental indicators (ROE, RevGrowth)
 POPULAR_SYMBOLS = [
@@ -25,11 +25,11 @@ POPULAR_SYMBOLS = [
 ]
 
 def migrate_database_columns():
-    """Ensures all expanded and premium columns exist in the SQLite schema before updating."""
-    if not os.path.exists(DB_FILE):
+    """Ensures all expanded and premium columns exist in the schema before updating."""
+    if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
         logger.error(f"[SyncJobYF] Database file not found at: {DB_FILE}")
         return
-    conn = sqlite3.connect(DB_FILE)
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     new_columns = [
         ("pb_ratio", "REAL"),
@@ -46,10 +46,13 @@ def migrate_database_columns():
     for col_name, col_type in new_columns:
         try:
             cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col_name} {col_type}")
+            conn.commit()
             logger.info(f"[SyncJobYF] Dynamic migration added column: {col_name}")
-        except sqlite3.OperationalError:
-            pass
-    conn.commit()
+        except DatabaseError:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
     conn.close()
 
 def sync_global_yfinance():
@@ -58,11 +61,11 @@ def sync_global_yfinance():
     using yfinance to offload FinMind API usage.
     """
     logger.info("[SyncJobYF] --- Starting yfinance fundamental metrics scan ---")
-    if not os.path.exists(DB_FILE):
+    if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
         logger.error(f"[SyncJobYF] Database file not found at: {DB_FILE}")
         return
         
-    conn = sqlite3.connect(DB_FILE)
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId FROM stock_metadata")
     rows = cursor.fetchall()

@@ -1,4 +1,3 @@
-import sqlite3
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -6,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from dal.stock_metadata_dao import StockMetadataDao
 from common.logger import logger
-from common.config import DB_FILE
+from common.base_dao import BaseDAO
 
 # Extended list of default watchlist stocks
 DEFAULT_SYMBOLS = [
@@ -291,9 +290,8 @@ class StockCrawler:
         return candles
 
 def sqlite3_connect_helper() -> List[Dict[str, Any]]:
-    """Helper to query all cached stock metadata directly from SQLite."""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
+    """Helper to query all cached stock metadata directly from the database."""
+    conn = BaseDAO.get_connection()
     rows = conn.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, stockId FROM stock_metadata").fetchall()
     conn.close()
     return [{

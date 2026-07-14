@@ -2,7 +2,6 @@ import sys
 import os
 import datetime
 import requests
-import sqlite3
 import time
 import yfinance as yf
 
@@ -20,7 +19,8 @@ if backend_dir not in sys.path:
 
 from dal.stock_metadata_dao import StockMetadataDao
 from common.logger import logger
-from common.config import DB_FILE
+from common.config import DB_TYPE, DB_FILE
+from common.base_dao import BaseDAO, OperationalError
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -68,11 +68,11 @@ def parse_roc_date_to_gregorian(roc_date_str):
 def sync_yfinance_top_50():
     """Syncs US stocks and top 50 volume stocks using yfinance."""
     logger.info("[SyncOfficial] --- Starting yfinance fundamental metrics scan (Top 50 Volume + US) ---")
-    if not os.path.exists(DB_FILE):
+    if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
         logger.error(f"[SyncOfficial] Database file not found at: {DB_FILE}")
         return
         
-    conn = sqlite3.connect(DB_FILE)
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId FROM stock_metadata")
     rows = cursor.fetchall()
@@ -374,11 +374,11 @@ def execute_sync():
 
     # 7. Connect to database and update Taiwan stock metrics
     if merged_taiwan_map:
-        if not os.path.exists(DB_FILE):
+        if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
             logger.error(f"[SyncOfficial] Database file not found at: {DB_FILE}")
             return
             
-        conn = sqlite3.connect(DB_FILE)
+        conn = BaseDAO.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId FROM stock_metadata")
         rows = cursor.fetchall()

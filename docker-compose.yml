@@ -1,6 +1,19 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: day_trading_db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgrespassword
+      - POSTGRES_DB=trading_platform
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
   backend:
     build:
       context: ./backend
@@ -8,6 +21,8 @@ services:
     container_name: day_trading_backend
     ports:
       - "8000:8000"
+    depends_on:
+      - db
     volumes:
       # Mount backend code to allow live-reload during local editing
       - ./backend:/app
@@ -15,12 +30,16 @@ services:
       - ./frontend:/frontend
       # Mount jobs directory for background tasks
       - ./jobs:/app/jobs
-      # Persist SQLite trading database on the host machine
+      # Persist SQLite trading database on the host machine (fallback/legacy support)
       - db_volume:/app/db
+      # Mount local .env configuration file
+      - ./.env:/app/.env
     environment:
       - ENV=development
       - TZ=Asia/Taipei
+      - DB_HOST=db
     restart: always
 
 volumes:
   db_volume:
+  pgdata:

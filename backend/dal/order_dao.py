@@ -26,7 +26,7 @@ class OrderDao(BaseDAO):
     @classmethod
     def get_all_orders(cls, username: str) -> List[Dict[str, Any]]:
         conn = cls.get_connection()
-        rows = conn.execute("SELECT order_id, symbol, action, price, qty, order_type, status, exec_price, timestamp FROM orders WHERE username = ? ORDER BY rowid DESC", (username,)).fetchall()
+        rows = conn.execute("SELECT order_id, symbol, action, price, qty, order_type, status, exec_price, timestamp FROM orders WHERE username = ? ORDER BY timestamp DESC", (username,)).fetchall()
         conn.close()
         
         orders = []

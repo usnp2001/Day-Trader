@@ -1,6 +1,5 @@
 import sys
 import os
-import sqlite3
 import requests
 import datetime
 import time
@@ -12,19 +11,20 @@ import yfinance as yf
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from common.config import DB_FILE
+from common.base_dao import BaseDAO
+from common.config import DB_TYPE, DB_FILE
 from common.logger import logger
 
 def main():
     logger.info("[Collector] Starting ML dataset collection job...")
     
-    if not os.path.exists(DB_FILE):
+    if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
         logger.error(f"[Collector] Database file not found at: {DB_FILE}")
         return
 
-    # 1. Fetch all Taiwan symbols and their latest official chips snapshot from SQLite
-    logger.info("[Collector] Querying SQLite for all Taiwan stock symbols & latest chips snapshot...")
-    conn = sqlite3.connect(DB_FILE)
+    # 1. Fetch all Taiwan symbols and their latest official chips snapshot from the database
+    logger.info("[Collector] Querying database for all Taiwan stock symbols & latest chips snapshot...")
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     cursor.execute("""
         SELECT symbol, name, foreign_net_buy, trust_net_buy, dealer_net_buy, margin_balance, short_balance

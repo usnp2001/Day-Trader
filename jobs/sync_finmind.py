@@ -2,7 +2,6 @@ import sys
 import os
 import datetime
 import requests
-import sqlite3
 import yfinance as yf
 
 # Add parent directory to sys.path to resolve backend package imports
@@ -16,9 +15,8 @@ if backend_dir not in sys.path:
 
 from dal.stock_metadata_dao import StockMetadataDao
 from common.logger import logger
-from common.config import DB_FILE
-
-FINMIND_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoidXNucDIwMDEiLCJlbWFpbCI6InVzbnAyMDAxQGdtYWlsLmNvbSIsInRva2VuX3ZlcnNpb24iOjB9.Vc5ppWVBZqusn0DXwjM0Ut4ZLnCBFWGusRnBJ9zI00A"
+from common.config import FINMIND_TOKEN, DB_TYPE, DB_FILE
+from common.base_dao import BaseDAO, OperationalError, DatabaseError
 
 def fetch_finmind_daily_bulk(dataset: str, token: str, days_back: int = 10) -> list:
     """Fetches bulk daily market records from FinMind by scanning dates backwards from today."""
@@ -145,11 +143,11 @@ def sync_finmind_taiwan_bulk():
 
     # 5. Connect and update SQLite cache
     logger.info("[SyncJob] Step 5: Connecting to database and saving Taiwan updates...")
-    if not os.path.exists(DB_FILE):
+    if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
         logger.error(f"[SyncJob] Database file not found at: {DB_FILE}")
         return
         
-    conn = sqlite3.connect(DB_FILE)
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     
     cursor.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId FROM stock_metadata")
@@ -204,11 +202,11 @@ def sync_global_yfinance():
     using yfinance to offload FinMind API usage.
     """
     logger.info("[SyncJob] --- Starting prioritized yfinance fundamental metrics scan ---")
-    if not os.path.exists(DB_FILE):
+    if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
         logger.error(f"[SyncJob] Database file not found at: {DB_FILE}")
         return
         
-    conn = sqlite3.connect(DB_FILE)
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT symbol, name, price, change, change_percent, volume, pe_ratio, ma5, ma20, stockId FROM stock_metadata")
     rows = cursor.fetchall()
@@ -291,11 +289,11 @@ def sync_global_yfinance():
 
 
 def migrate_database_columns():
-    """Ensures all expanded and premium columns exist in the SQLite schema before updating."""
-    if not os.path.exists(DB_FILE):
+    """Ensures all expanded and premium columns exist in the schema before updating."""
+    if DB_TYPE == "sqlite" and not os.path.exists(DB_FILE):
         logger.error(f"[SyncJob] Database file not found at: {DB_FILE}")
         return
-    conn = sqlite3.connect(DB_FILE)
+    conn = BaseDAO.get_connection()
     cursor = conn.cursor()
     new_columns = [
         ("pb_ratio", "REAL"),
@@ -312,10 +310,13 @@ def migrate_database_columns():
     for col_name, col_type in new_columns:
         try:
             cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col_name} {col_type}")
+            conn.commit()
             logger.info(f"[SyncJob] Dynamic migration added column: {col_name}")
-        except sqlite3.OperationalError:
-            pass
-    conn.commit()
+        except DatabaseError:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
     conn.close()
 
 def execute_sync():
