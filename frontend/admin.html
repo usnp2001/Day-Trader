@@ -325,6 +325,58 @@
         <!-- Main Workspace -->
         <main class="admin-grid">
             
+            <!-- Left/Top: Ace Watchlist Management Panel -->
+            <section class="panel-card" style="grid-column: 1 / -1; margin-top: 20px;">
+                <h2>艾斯選股參數與檔案管理</h2>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <!-- Config Form -->
+                    <div>
+                        <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;">自動下載設定</h3>
+                        <form id="ace-config-form" onsubmit="saveAceConfig(event)">
+                            <div class="form-group">
+                                <label class="form-label" for="ace-url">聚財網策略 Excel 下載網址</label>
+                                <input class="form-input" type="text" id="ace-url" placeholder="https://..." required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="ace-cookies">Session Cookies (Cookie Header 字串)</label>
+                                <textarea class="form-input" id="ace-cookies" rows="4" placeholder="key1=value1; key2=value2..." style="resize: vertical; height: 100px; font-family: monospace;" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary" id="btn-save-ace-config">儲存下載設定</button>
+                        </form>
+                    </div>
+                    
+                    <!-- File Upload & Operation -->
+                    <div style="border-left: 1px solid var(--border-color); padding-left: 30px;">
+                        <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px;">手動同步與清除操作</h3>
+                        
+                        <!-- Upload File form -->
+                        <div class="form-group" style="margin-bottom: 25px;">
+                            <label class="form-label">手動上傳選股 Excel (.xlsx)</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input class="form-input" type="file" id="ace-file-upload" accept=".xlsx" style="padding: 8px;">
+                                <button type="button" class="btn btn-primary" onclick="uploadAceExcelFile()" id="btn-upload-ace-excel">上傳並同步</button>
+                            </div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">
+                                上傳後系統將自動解析、清洗代碼，並即時覆寫至資料庫中。
+                            </p>
+                        </div>
+                        
+                        <!-- Danger Area -->
+                        <div style="background: rgba(242, 54, 69, 0.05); border: 1px solid rgba(242, 54, 69, 0.15); padding: 20px; border-radius: 8px;">
+                            <h4 style="color: var(--danger-text); font-size: 13px; font-weight: 600; margin-bottom: 8px;">危險管理操作</h4>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">
+                                清除動作會同時將資料庫中當日的「艾斯選股名單」清空，並移除伺服器上所有快取的 Excel 檔案。
+                            </p>
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <span id="ace-file-status" style="font-size: 12px; color: var(--text-secondary);">下載狀態：檢查中...</span>
+                                <button type="button" class="btn" style="background: var(--danger-bg); color: var(--danger-text); border: 1px solid rgba(242, 54, 69, 0.2); padding: 8px 16px; font-size: 12px;" onclick="clearAceData()" id="btn-clear-ace-data">清除資料與暫存檔</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
             <!-- Right Side: User Accounts List -->
             <section class="panel-card" style="grid-column: 1 / -1; margin-top: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
@@ -763,8 +815,133 @@
             window.location.href = '/login.html';
         }
 
+        async function fetchAceConfig() {
+            try {
+                const response = await fetch('/api/admin/ace/config', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    document.getElementById('ace-url').value = data.wearn_excel_url || '';
+                    document.getElementById('ace-cookies').value = data.wearn_cookies || '';
+                    
+                    const statusSpan = document.getElementById('ace-file-status');
+                    if (data.today_file_exists) {
+                        statusSpan.innerHTML = `<span style="color: var(--success-color); font-weight: 600;">今日已下載 (${data.today_file_name})</span>`;
+                    } else {
+                        statusSpan.innerHTML = `<span style="color: var(--text-secondary);">今日無下載檔案</span>`;
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching Ace Config:', err);
+            }
+        }
+
+        async function saveAceConfig(e) {
+            e.preventDefault();
+            const url = document.getElementById('ace-url').value.trim();
+            const cookies = document.getElementById('ace-cookies').value.trim();
+            const submitBtn = document.getElementById('btn-save-ace-config');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '儲存中...';
+            
+            try {
+                const response = await fetch('/api/admin/ace/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ wearn_excel_url: url, wearn_cookies: cookies })
+                });
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    alert('下載設定儲存成功！');
+                    fetchAceConfig();
+                } else {
+                    alert(data.detail || '儲存失敗');
+                }
+            } catch (err) {
+                alert('連線伺服器失敗，儲存設定失敗。');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '儲存下載設定';
+            }
+        }
+
+        async function uploadAceExcelFile() {
+            const fileInput = document.getElementById('ace-file-upload');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('請選擇要上傳的 Excel (.xlsx) 檔案。');
+                return;
+            }
+            const file = fileInput.files[0];
+            const submitBtn = document.getElementById('btn-upload-ace-excel');
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = '處理中...';
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            
+            try {
+                const response = await fetch('/api/admin/ace/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    alert(`上傳成功！已同步 ${data.symbols.length} 檔選股股票。`);
+                    fileInput.value = '';
+                    fetchAceConfig();
+                } else {
+                    alert(data.detail || '解析上傳檔案失敗。');
+                }
+            } catch (err) {
+                alert('連線伺服器失敗，上傳取消。');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '上傳並同步';
+            }
+        }
+
+        async function clearAceData() {
+            if (!confirm('確定要清除當前所有的艾斯選股資料庫名單，並刪除伺服器上的所有 Excel 歷史暫存檔嗎？此動作不可逆！')) {
+                return;
+            }
+            const submitBtn = document.getElementById('btn-clear-ace-data');
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/admin/ace/clear', {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    alert(data.message);
+                    fetchAceConfig();
+                } else {
+                    alert(data.detail || '清除失敗');
+                }
+            } catch (err) {
+                alert('連線伺服器失敗，清除操作取消。');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
         // Initialize user table list
         fetchUsers();
+        fetchAceConfig();
     </script>
 </body>
 </html>

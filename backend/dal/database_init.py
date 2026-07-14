@@ -129,6 +129,24 @@ def init_db():
         )
     """)
     conn.commit()
+
+    # 6. Ace Watchlist table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ace_watchlist (
+            symbol TEXT PRIMARY KEY,
+            update_date TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
+    # 7. System Config table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS system_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    conn.commit()
     
     # stockId migration
     try:

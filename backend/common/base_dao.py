@@ -48,8 +48,13 @@ class PGCursorWrapper:
         self._cursor = cursor
 
     def _translate_sql(self, sql):
-        # Translate SQLite placeholders (?) to PostgreSQL format (%s)
-        sql = sql.replace("?", "%s")
+        # 1. Temporarily protect SQLite placeholders (?)
+        sql = sql.replace("?", "__PARAM_PLACEHOLDER__")
+        # 2. Escape literal % to %% for PostgreSQL formatting compatibility
+        sql = sql.replace("%", "%%")
+        # 3. Convert protected placeholders to PostgreSQL format (%s)
+        sql = sql.replace("__PARAM_PLACEHOLDER__", "%s")
+        
         # Translate SQLite specific UPSERT (INSERT OR REPLACE / REPLACE INTO) to PostgreSQL compatible syntax
         if "INSERT OR REPLACE INTO positions" in sql or "REPLACE INTO positions" in sql:
             sql = """

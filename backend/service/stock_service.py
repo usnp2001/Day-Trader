@@ -3,6 +3,7 @@ import subprocess
 import sys
 from typing import List, Dict, Any
 from dal.stock_metadata_dao import StockMetadataDao
+from dal.ace_watchlist_dao import AceWatchlistDao
 from crawler import StockCrawler
 from common.logger import logger
 from common.exceptions import ServiceException
@@ -54,8 +55,17 @@ class StockService:
 
     @classmethod
     def get_ace_stocks(cls, page: int, page_size: int) -> Dict[str, Any]:
-        # Predefined symbols for Ace Stock Selection mock data
-        ace_symbols = ["2330.TW", "2317.TW", "2454.TW", "2603.TW", "3231.TW"]
+        # Try fetching from the PostgreSQL/SQLite ace_watchlist database
+        try:
+            ace_symbols = AceWatchlistDao.get_all_symbols()
+        except Exception as e:
+            logger.error(f"[Service] Failed to load ace_watchlist: {e}")
+            ace_symbols = []
+            
+        # Safety fallback if empty or database loading fails
+        if not ace_symbols:
+            ace_symbols = ["2330.TW", "2317.TW", "2454.TW", "2603.TW", "3231.TW"]
+            
         ace_stocks = StockMetadataDao.get_stocks_by_symbols(ace_symbols)
         
         total_count = len(ace_stocks)
