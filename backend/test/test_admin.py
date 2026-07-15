@@ -89,6 +89,10 @@ def test_admin_ace_features():
     # Check DB is cleared
     db_symbols_cleared = AceWatchlistDao.get_all_symbols()
     assert len(db_symbols_cleared) == 0
+    
+    # Reset config in database back to empty so it doesn't break background job runs
+    SystemConfigDao.set_config("wearn_excel_url", "")
+    SystemConfigDao.set_config("wearn_cookies", "")
     print("-> SUCCESS: Watchlist cleared.")
 
     # 6. Unauthorized access check
