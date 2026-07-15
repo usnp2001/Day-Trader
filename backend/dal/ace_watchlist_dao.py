@@ -17,9 +17,12 @@ class AceWatchlistDao(BaseDAO):
             conn.close()
 
     @classmethod
-    def add_symbols_to_watchlist(cls, symbols: List[str], update_date: str, conn=None):
-        """Adds a list of stock symbols to the ace_watchlist."""
-        if not symbols:
+    def add_symbols_to_watchlist(cls, rows: List[tuple], conn=None):
+        """Adds a list of stock symbols with characteristics features to the ace_watchlist.
+
+        Each tuple in rows should be: (symbol, update_date, strength_dna, hint_double, magic_band, short_sniper, rebound_sprint, create_date)
+        """
+        if not rows:
             return
             
         should_close = False
@@ -29,13 +32,17 @@ class AceWatchlistDao(BaseDAO):
             
         cursor = conn.cursor()
         
-        # Prepare batch insert rows
-        rows = [(sym, update_date) for sym in symbols]
-        
         cursor.executemany("""
-            INSERT INTO ace_watchlist (symbol, update_date)
-            VALUES (?, ?)
-            ON CONFLICT (symbol) DO UPDATE SET update_date = EXCLUDED.update_date
+            INSERT INTO ace_watchlist (symbol, update_date, strength_dna, hint_double, magic_band, short_sniper, rebound_sprint, create_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (symbol) DO UPDATE SET 
+                update_date = EXCLUDED.update_date,
+                strength_dna = EXCLUDED.strength_dna,
+                hint_double = EXCLUDED.hint_double,
+                magic_band = EXCLUDED.magic_band,
+                short_sniper = EXCLUDED.short_sniper,
+                rebound_sprint = EXCLUDED.rebound_sprint,
+                create_date = EXCLUDED.create_date
         """, rows)
         
         conn.commit()

@@ -352,9 +352,9 @@
                         
                         <!-- Upload File form -->
                         <div class="form-group" style="margin-bottom: 25px;">
-                            <label class="form-label">手動上傳選股 Excel (.xlsx)</label>
+                            <label class="form-label">手動上傳選股 Excel (.xlsx / .xls)</label>
                             <div style="display: flex; gap: 10px; align-items: center;">
-                                <input class="form-input" type="file" id="ace-file-upload" accept=".xlsx" style="padding: 8px;">
+                                <input class="form-input" type="file" id="ace-file-upload" accept=".xlsx, .xls" style="padding: 8px;">
                                 <button type="button" class="btn btn-primary" onclick="uploadAceExcelFile()" id="btn-upload-ace-excel">上傳並同步</button>
                             </div>
                             <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">
@@ -875,7 +875,7 @@
         async function uploadAceExcelFile() {
             const fileInput = document.getElementById('ace-file-upload');
             if (!fileInput.files || fileInput.files.length === 0) {
-                alert('請選擇要上傳的 Excel (.xlsx) 檔案。');
+                alert('請選擇要上傳的 Excel (.xlsx, .xls) 檔案。');
                 return;
             }
             const file = fileInput.files[0];

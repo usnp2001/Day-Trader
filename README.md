@@ -78,16 +78,46 @@ docker-compose up -d --build
 
 ---
 
-## 隨時單獨執行 FinMind 數據同步排程
-若您需要手動或透過外部排程工具（如 Crontab / Windows Task Scheduler）執行 FinMind 與 yfinance 混合數據更新，請在專案根目錄下直接執行：
-```bash
-python backend/jobs/sync_finmind.py
-```
-本腳本會自動完成：
-1. 資料庫缺失欄位的自動升級與遷移。
-2. 以 4 次大請求下載全台股 PER、三大法人與融資券大數據，並進行記憶體 Merge。
-3. 透過 `yfinance` 獲取美股及熱門自選股之 PE/PB、ROE 及營收成長率，並寫入資料庫快取。
-4. 日誌會同步寫入至 `backend/logs/trading_platform.log`。
+## 隨時單獨執行背景排程任務 (Background Jobs)
+
+本專案提供三個獨立的背景排程腳本，用於更新股價、法人籌碼與艾斯選股等數據。您可以在手動調用或配置定時任務（如 Crontab / Windows 工作排程器）時使用。
+
+> [!TIP]
+> 推薦在 **Docker 容器內** 執行這些腳本，以確保 Python 依賴套件環境一致且完整。
+
+### 1. 艾斯選股 Excel 同步任務 (`sync_ace_selection.py`)
+負責從聚財網下載並解析選股 Excel，清洗股號並將最新指標特徵存入 `ace_watchlist`，並記錄實際執行的 TIMESTAMP 時間戳記。
+* **在 Docker 容器內執行（推薦）：**
+  ```bash
+  docker-compose exec backend python jobs/sync_ace_selection.py
+  ```
+* **在本機 Windows 環境下執行：**
+  *(需先在本機執行 `pip install -r backend/requirements.txt`)*
+  ```bash
+  python jobs/sync_ace_selection.py
+  ```
+
+### 2. FinMind 大戶籌碼與美股資料同步任務 (`sync_finmind.py`)
+下載全台股 PER、三大法人與融資券大數據，並透過 yfinance 獲取美股 PE/PB、ROE 等指標。
+* **在 Docker 容器內執行（推薦）：**
+  ```bash
+  docker-compose exec backend python jobs/sync_finmind.py
+  ```
+* **在本機 Windows 環境下執行：**
+  ```bash
+  python jobs/sync_finmind.py
+  ```
+
+### 3. 個股即時評價與爬蟲快取更新任務 (`sync_yfinance.py`)
+日常更新台灣上市/上櫃個股與熱門股的即時股價、漲跌幅、成交量及 MA5/MA20 快取。
+* **在 Docker 容器內執行（推薦）：**
+  ```bash
+  docker-compose exec backend python jobs/sync_yfinance.py
+  ```
+* **在本機 Windows 環境下執行：**
+  ```bash
+  python jobs/sync_yfinance.py
+  ```
 
 ---
 

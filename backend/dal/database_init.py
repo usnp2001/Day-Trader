@@ -134,7 +134,13 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ace_watchlist (
             symbol TEXT PRIMARY KEY,
-            update_date TEXT NOT NULL
+            update_date TEXT NOT NULL,
+            strength_dna TEXT,
+            hint_double TEXT,
+            magic_band TEXT,
+            short_sniper TEXT,
+            rebound_sprint TEXT,
+            create_date TIMESTAMP
         )
     """)
     conn.commit()
@@ -183,6 +189,37 @@ def init_db():
             except Exception:
                 pass
     
+    # Run ace watchlist migrations for the 5 new strategy characteristics columns
+    for col, col_type in [
+        ("strength_dna", "TEXT"),
+        ("hint_double", "TEXT"),
+        ("magic_band", "TEXT"),
+        ("short_sniper", "TEXT"),
+        ("rebound_sprint", "TEXT"),
+        ("create_date", "TIMESTAMP")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE ace_watchlist ADD COLUMN {col} {col_type}")
+            conn.commit()
+        except DatabaseError as e:
+            logger.debug(f"[Database] Migration note for ace_watchlist.{col}: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    # Drop obsolete columns from ace_watchlist
+    for col in ["strength", "level_val", "chips", "volume_score", "eat_score"]:
+        try:
+            cursor.execute(f"ALTER TABLE ace_watchlist DROP COLUMN IF EXISTS {col}")
+            conn.commit()
+        except DatabaseError as e:
+            logger.debug(f"[Database] Skip dropping column {col}: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+                
     # Remove old 'INTEL' symbol
     cursor.execute("DELETE FROM stock_metadata WHERE symbol = 'INTEL'")
 

@@ -23,23 +23,28 @@ async def get_ace_config(current_admin: str = Depends(get_current_admin)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
         
-    # Check if today's file exists
+    # Check if today's file exists (.xlsx or .xls)
     today_str = datetime.date.today().strftime("%Y-%m-%d")
-    # Resolve jobs/downloads path
     if os.path.exists("/app/jobs"):
         downloads_dir = "/app/jobs/downloads"
     else:
         downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "jobs", "downloads"))
         
-    file_path = os.path.join(downloads_dir, f"ace_selection_{today_str}.xlsx")
-    today_file_exists = os.path.exists(file_path)
+    file_path_xlsx = os.path.join(downloads_dir, f"ace_selection_{today_str}.xlsx")
+    file_path_xls = os.path.join(downloads_dir, f"ace_selection_{today_str}.xls")
     
+    file_name = None
+    if os.path.exists(file_path_xlsx):
+        file_name = f"ace_selection_{today_str}.xlsx"
+    elif os.path.exists(file_path_xls):
+        file_name = f"ace_selection_{today_str}.xls"
+        
     return {
         "status": "success",
         "wearn_excel_url": url or "",
         "wearn_cookies": cookies or "",
-        "today_file_exists": today_file_exists,
-        "today_file_name": f"ace_selection_{today_str}.xlsx" if today_file_exists else None
+        "today_file_exists": file_name is not None,
+        "today_file_name": file_name
     }
 
 @router.post("/ace/config")
@@ -54,8 +59,13 @@ async def update_ace_config(req: ConfigUpdateRequest, current_admin: str = Depen
 
 @router.post("/ace/upload")
 async def upload_ace_excel(file: UploadFile = File(...), current_admin: str = Depends(get_current_admin)):
-    if not file.filename.endswith(".xlsx"):
-        raise HTTPException(status_code=400, detail="Only .xlsx Excel files are supported")
+    ext = None
+    if file.filename.endswith(".xlsx"):
+        ext = ".xlsx"
+    elif file.filename.endswith(".xls"):
+        ext = ".xls"
+    else:
+        raise HTTPException(status_code=400, detail="Only .xlsx or .xls Excel files are supported")
         
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     if os.path.exists("/app/jobs"):
@@ -64,7 +74,7 @@ async def upload_ace_excel(file: UploadFile = File(...), current_admin: str = De
         downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "jobs", "downloads"))
         
     os.makedirs(downloads_dir, exist_ok=True)
-    file_path = os.path.join(downloads_dir, f"ace_selection_{today_str}.xlsx")
+    file_path = os.path.join(downloads_dir, f"ace_selection_{today_str}{ext}")
     
     try:
         # Save uploaded file
@@ -110,8 +120,8 @@ async def clear_ace_data(current_admin: str = Depends(get_current_admin)):
         
     deleted_files_count = 0
     if os.path.exists(downloads_dir):
-        xlsx_files = glob.glob(os.path.join(downloads_dir, "*.xlsx"))
-        for f in xlsx_files:
+        excel_files = glob.glob(os.path.join(downloads_dir, "*.xlsx")) + glob.glob(os.path.join(downloads_dir, "*.xls"))
+        for f in excel_files:
             try:
                 os.remove(f)
                 deleted_files_count += 1
