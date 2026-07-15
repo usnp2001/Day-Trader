@@ -4,7 +4,11 @@ import uuid
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from typing import Optional
 
-from model.auth import RegisterRequest, LoginRequest, ProfileUpdateRequest, AdminUserUpdateRequest, CreateUserRequest
+from models.input.register_Input import RegisterRequest
+from models.input.login_api_Input import LoginRequest
+from models.input.update_user_profile_api_Input import ProfileUpdateRequest
+from models.input.admin_update_user_api_Input import AdminUserUpdateRequest
+from models.input.admin_create_user_Input import CreateUserRequest
 from service.user_service import UserService
 from controller.dependencies import get_current_user, get_current_admin
 from common.config import JWT_SECRET

@@ -7,13 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from controller.dependencies import get_current_admin
 from dal.system_config_dao import SystemConfigDao
 from dal.ace_watchlist_dao import AceWatchlistDao
-from pydantic import BaseModel
+from models.input.update_ace_config_Input import ConfigUpdateRequest
 
 router = APIRouter(prefix="/api/admin")
-
-class ConfigUpdateRequest(BaseModel):
-    wearn_excel_url: str
-    wearn_cookies: str
 
 @router.get("/ace/config")
 async def get_ace_config(current_admin: str = Depends(get_current_admin)):

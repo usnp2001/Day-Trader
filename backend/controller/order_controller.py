@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from model.order import OrderRequest
+from models.input.place_order_Input import OrderRequest
 from service.order_service import OrderService
 from controller.dependencies import get_current_user
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from model.account import CashAdjustmentRequest
+from models.input.adjust_cash_Input import CashAdjustmentRequest
 from service.account_service import AccountService
 from controller.dependencies import get_current_user
 
