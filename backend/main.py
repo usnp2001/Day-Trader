@@ -23,7 +23,7 @@ from broker import MockBroker
 from crawler import StockCrawler
 
 # Controllers
-from controller import auth_controller, account_controller, order_controller, stock_controller, admin_controller
+from controller import auth_controller, account_controller, order_controller, stock_controller, admin_controller, day_trading_controller
 
 app = FastAPI(
     title="Day Trading Web Platform API - Phase 3 (MVC Refactoring)",
@@ -53,6 +53,7 @@ app.include_router(account_controller.router)
 app.include_router(order_controller.router)
 app.include_router(stock_controller.router)
 app.include_router(admin_controller.router)
+app.include_router(day_trading_controller.router)
 
 # Instantiate crawler for startup background sync
 crawler = StockCrawler()

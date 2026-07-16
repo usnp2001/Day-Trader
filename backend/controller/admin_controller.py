@@ -8,6 +8,7 @@ from controller.dependencies import get_current_admin
 from dal.system_config_dao import SystemConfigDao
 from dal.ace_watchlist_dao import AceWatchlistDao
 from models.input.update_ace_config_Input import ConfigUpdateRequest
+from models.output import ApiResponse
 
 router = APIRouter(prefix="/api/admin")
 
@@ -35,13 +36,12 @@ async def get_ace_config(current_admin: str = Depends(get_current_admin)):
     elif os.path.exists(file_path_xls):
         file_name = f"ace_selection_{today_str}.xls"
         
-    return {
-        "status": "success",
+    return ApiResponse.create(result={
         "wearn_excel_url": url or "",
         "wearn_cookies": cookies or "",
         "today_file_exists": file_name is not None,
         "today_file_name": file_name
-    }
+    })
 
 @router.post("/ace/config")
 async def update_ace_config(req: ConfigUpdateRequest, current_admin: str = Depends(get_current_admin)):
@@ -51,7 +51,7 @@ async def update_ace_config(req: ConfigUpdateRequest, current_admin: str = Depen
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
         
-    return {"status": "success", "message": "Configuration updated successfully"}
+    return ApiResponse.create(message="Configuration updated successfully")
 
 @router.post("/ace/upload")
 async def upload_ace_excel(file: UploadFile = File(...), current_admin: str = Depends(get_current_admin)):
@@ -94,11 +94,10 @@ async def upload_ace_excel(file: UploadFile = File(...), current_admin: str = De
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"Failed to process uploaded Excel: {e}")
         
-    return {
-        "status": "success",
+    return ApiResponse.create(result={
         "message": f"Excel uploaded and parsed successfully. Synced {len(db_symbols)} stocks.",
         "symbols": db_symbols
-    }
+    })
 
 @router.delete("/ace/clear")
 async def clear_ace_data(current_admin: str = Depends(get_current_admin)):
@@ -125,7 +124,4 @@ async def clear_ace_data(current_admin: str = Depends(get_current_admin)):
                 # Log but continue
                 print(f"Failed to delete file {f}: {e}")
                 
-    return {
-        "status": "success",
-        "message": f"Successfully cleared watchlist data and deleted {deleted_files_count} local files."
-    }
+    return ApiResponse.create(message=f"Successfully cleared watchlist data and deleted {deleted_files_count} local files.")

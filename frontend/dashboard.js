@@ -113,7 +113,7 @@ async function handleAdjustCash() {
             return;
         }
         const data = await res.json();
-        if (res.ok && data.status === 'success') {
+        if (res.ok && data.status === 200) {
             state.accountSummary.cash = newCash;
             renderAccountSummary();
             recalculateHeaderAssets();
@@ -158,8 +158,8 @@ async function fetchScreenerList() {
             return;
         }
         const json = await res.json();
-        if (json.status === "success") {
-            state.screenerStocks = json.data;
+        if (json.status === 200) {
+            state.screenerStocks = json.result;
         }
     } catch (e) {
         console.error("Error fetching stocks list:", e);
@@ -176,9 +176,9 @@ async function fetchInventory() {
             return;
         }
         const json = await res.json();
-        if (json.status === "success") {
-            state.positions = json.positions;
-            state.accountSummary = json.summary;
+        if (json.status === 200) {
+            state.positions = json.result.positions;
+            state.accountSummary = json.result.summary;
             renderAccountSummary();
             renderPortfolio();
             await fetchOrders();
@@ -198,8 +198,8 @@ async function fetchOrders() {
             return;
         }
         const json = await res.json();
-        if (json.status === "success") {
-            state.orders = json.orders;
+        if (json.status === 200) {
+            state.orders = json.result.orders;
             renderOrderHistory();
         }
     } catch (e) {
@@ -217,9 +217,9 @@ async function fetchKlineHistory() {
             return;
         }
         const json = await res.json();
-        if (json.status === "success") {
-            state.chartManager.loadData(json.data);
-            const lastCandle = json.data[json.data.length - 1];
+        if (json.status === 200) {
+            state.chartManager.loadData(json.result.data);
+            const lastCandle = json.result.data[json.result.data.length - 1];
             if (lastCandle) {
                 updateChartOverlay(lastCandle.close, 0.0);
             }
@@ -341,8 +341,8 @@ function initSearchAutocomplete() {
                 return;
             }
             const json = await res.json();
-            if (json.status === "success" && json.results.length > 0) {
-                renderSuggestions(json.results);
+            if (json.status === 200 && json.result.results.length > 0) {
+                renderSuggestions(json.result.results);
             } else {
                 suggestions.innerHTML = `<div style="padding: 8px 12px; color: var(--text-muted); font-size:12px;">查無相符股票</div>`;
                 suggestions.style.display = "block";
@@ -788,11 +788,11 @@ async function submitOrder() {
         }
 
         const json = await res.json();
-        if (json.status === "success") {
+        if (json.status === 200) {
             closeTradingModal();
             await fetchInventory();
         } else {
-            alert("下單失敗: " + json.detail);
+            alert("下單失敗: " + (json.message || json.detail));
         }
     } catch (e) {
         console.error("Order submission error:", e);

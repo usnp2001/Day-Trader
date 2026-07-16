@@ -25,7 +25,7 @@ def test_admin_ace_features():
         "password": "admin123"
     })
     assert login_resp.status_code == 200
-    token = login_resp.json()["access_token"]
+    token = login_resp.json()["result"]["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     print("-> SUCCESS: Logged in.")
 
@@ -34,8 +34,8 @@ def test_admin_ace_features():
     res_get = client.get("/api/admin/ace/config", headers=headers)
     assert res_get.status_code == 200
     json_get = res_get.json()
-    assert json_get["status"] == "success"
-    print(f"-> SUCCESS: Current URL: '{json_get['wearn_excel_url']}'")
+    assert json_get["status"] == 200
+    print(f"-> SUCCESS: Current URL: '{json_get['result']['wearn_excel_url']}'")
 
     # 3. Update Config
     print("\n[Test 3] Updating Ace Config...")
@@ -46,7 +46,7 @@ def test_admin_ace_features():
         "wearn_cookies": new_cookies
     }, headers=headers)
     assert res_post.status_code == 200
-    assert res_post.json()["status"] == "success"
+    assert res_post.json()["status"] == 200
     
     # Verify in DB
     assert SystemConfigDao.get_config("wearn_excel_url") == new_url
@@ -70,9 +70,9 @@ def test_admin_ace_features():
     res_upload = client.post("/api/admin/ace/upload", files=files, headers=headers)
     assert res_upload.status_code == 200
     json_upload = res_upload.json()
-    assert json_upload["status"] == "success"
-    assert len(json_upload["symbols"]) == 3
-    print(f"-> SUCCESS: Uploaded Excel. Synced symbols: {json_upload['symbols']}")
+    assert json_upload["status"] == 200
+    assert len(json_upload["result"]["symbols"]) == 3
+    print(f"-> SUCCESS: Uploaded Excel. Synced symbols: {json_upload['result']['symbols']}")
 
     # Check watchlist in DB
     db_symbols = AceWatchlistDao.get_all_symbols()
@@ -84,7 +84,7 @@ def test_admin_ace_features():
     print("\n[Test 5] Clearing Ace watchlist and cached files...")
     res_clear = client.delete("/api/admin/ace/clear", headers=headers)
     assert res_clear.status_code == 200
-    assert res_clear.json()["status"] == "success"
+    assert res_clear.json()["status"] == 200
     
     # Check DB is cleared
     db_symbols_cleared = AceWatchlistDao.get_all_symbols()

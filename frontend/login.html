@@ -431,11 +431,11 @@
                 });
 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
+                if (response.ok && data.status === 200) {
                     // Store Token, Username and Role
-                    localStorage.setItem('token', data.access_token);
-                    localStorage.setItem('username', data.username);
-                    localStorage.setItem('role', data.role);
+                    localStorage.setItem('token', data.result.access_token);
+                    localStorage.setItem('username', data.result.username);
+                    localStorage.setItem('role', data.result.role);
                     
                     showAlert('success', '驗證成功！正在引導進入系統...');
                     setTimeout(() => {
@@ -468,10 +468,10 @@
                 });
                 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    document.getElementById(targetUrlInputId).value = data.avatar_url;
+                if (response.ok && data.status === 200) {
+                    document.getElementById(targetUrlInputId).value = data.result.avatar_url;
                     const previewImg = document.getElementById(previewImgId);
-                    previewImg.src = data.avatar_url;
+                    previewImg.src = data.result.avatar_url;
                     previewImg.parentElement.style.display = 'block';
                     showAlert('success', '大頭照上傳成功！');
                 } else {

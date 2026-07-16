@@ -109,8 +109,8 @@ async function fetchUserCash() {
             return;
         }
         const json = await res.json();
-        if (json.status === 'success') {
-            updateCashDisplay(json.summary.cash);
+        if (json.status === 200) {
+            updateCashDisplay(json.result.summary.cash);
         }
     } catch (err) {
         console.error("Failed to fetch account cash:", err);
@@ -143,7 +143,7 @@ async function handleAdjustCash() {
             return;
         }
         const data = await res.json();
-        if (res.ok && data.status === 'success') {
+        if (res.ok && data.status === 200) {
             updateCashDisplay(newCash);
         } else {
             alert(data.detail || '金額修改失敗');
@@ -271,20 +271,20 @@ async function fetchStocks() {
 
         const json = await res.json();
         
-        if (json.status === "success") {
+        if (json.status === 200) {
             if (state.currentMode === "ai") {
                 state.totalPages = 1;
                 state.currentPage = 1;
-                document.getElementById("results-count").innerText = `共 ${json.stocks.length} 筆資料 (AI預測排序)`;
+                document.getElementById("results-count").innerText = `共 ${json.result.stocks.length} 筆資料 (AI預測排序)`;
             } else {
-                state.totalPages = json.total_pages;
-                state.currentPage = json.current_page;
-                document.getElementById("results-count").innerText = `共 ${json.total_count} 筆資料`;
+                state.totalPages = json.result.total_pages;
+                state.currentPage = json.result.current_page;
+                document.getElementById("results-count").innerText = `共 ${json.result.total_count} 筆資料`;
             }
-            renderStockList(json.stocks);
+            renderStockList(json.result.stocks);
             updatePaginationUI();
         } else {
-            tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.detail}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.message || json.detail}</td></tr>`;
         }
     } catch (err) {
         console.error("Fetch request failed:", err);
@@ -395,8 +395,8 @@ async function fetchUserProfileAndSetAvatar() {
         });
         if (res.ok) {
             const json = await res.json();
-            if (json.status === 'success' && json.profile) {
-                const profile = json.profile;
+            if (json.status === 200 && json.result) {
+                const profile = json.result;
                 const avatarImg = document.getElementById('header-user-avatar');
                 if (avatarImg) {
                     if (profile.profile_pic) {
@@ -426,8 +426,8 @@ window.openProfileModal = async function() {
         }
         
         const json = await res.json();
-        if (res.ok && json.status === 'success') {
-            const profile = json.profile;
+        if (res.ok && json.status === 200) {
+            const profile = json.result;
             
             document.getElementById('profile-username').value = profile.username;
             document.getElementById('profile-name').value = profile.name || '';
@@ -473,10 +473,10 @@ window.uploadAvatarFile = async function(input, targetUrlInputId, previewImgId) 
         });
         
         const data = await response.json();
-        if (response.ok && data.status === 'success') {
-            document.getElementById(targetUrlInputId).value = data.avatar_url;
+        if (response.ok && data.status === 200) {
+            document.getElementById(targetUrlInputId).value = data.result.avatar_url;
             const previewImg = document.getElementById(previewImgId);
-            previewImg.src = data.avatar_url;
+            previewImg.src = data.result.avatar_url;
             previewImg.style.display = 'block';
             alert('大頭照上傳成功！');
         } else {
@@ -514,7 +514,7 @@ window.handleSaveProfile = async function(e) {
         });
         
         const data = await response.json();
-        if (response.ok && data.status === 'success') {
+        if (response.ok && data.status === 200) {
             alert('個人資料儲存成功！');
             closeProfileModal();
             fetchUserProfileAndSetAvatar(); // Refresh header avatar

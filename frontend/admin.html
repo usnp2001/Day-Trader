@@ -531,8 +531,8 @@
                 }
                 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    renderUsersTable(data.users);
+                if (response.ok && data.status === 200) {
+                    renderUsersTable(data.result);
                 } else {
                     console.error('Failed to load user list', data);
                 }
@@ -618,10 +618,10 @@
                 });
                 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    document.getElementById(targetUrlInputId).value = data.avatar_url;
+                if (response.ok && data.status === 200) {
+                    document.getElementById(targetUrlInputId).value = data.result.avatar_url;
                     const previewImg = document.getElementById(previewImgId);
-                    previewImg.src = data.avatar_url;
+                    previewImg.src = data.result.avatar_url;
                     previewImg.style.display = 'block';
                     alert('圖片上傳成功！');
                 } else {
@@ -690,7 +690,7 @@
                 });
 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
+                if (response.ok && data.status === 200) {
                     alert('帳戶資訊修改成功！');
                     closeEditUserModal();
                     fetchUsers();
@@ -715,7 +715,7 @@
                 });
 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
+                if (response.ok && data.status === 200) {
                     fetchUsers();
                 } else {
                     alert(data.detail || '操作失敗');
@@ -766,7 +766,7 @@
                 });
 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
+                if (response.ok && data.status === 200) {
                     showMessage('success', `帳戶 '${username}' 開立成功！`);
                     usernameInput.value = '';
                     passwordInput.value = '';
@@ -800,7 +800,7 @@
                 });
 
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
+                if (response.ok && data.status === 200) {
                     fetchUsers();
                 } else {
                     alert(data.detail || '刪除失敗');
@@ -823,13 +823,13 @@
                     }
                 });
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    document.getElementById('ace-url').value = data.wearn_excel_url || '';
-                    document.getElementById('ace-cookies').value = data.wearn_cookies || '';
+                if (response.ok && data.status === 200) {
+                    document.getElementById('ace-url').value = data.result.wearn_excel_url || '';
+                    document.getElementById('ace-cookies').value = data.result.wearn_cookies || '';
                     
                     const statusSpan = document.getElementById('ace-file-status');
-                    if (data.today_file_exists) {
-                        statusSpan.innerHTML = `<span style="color: var(--success-color); font-weight: 600;">今日已下載 (${data.today_file_name})</span>`;
+                    if (data.result.today_file_exists) {
+                        statusSpan.innerHTML = `<span style="color: var(--success-color); font-weight: 600;">今日已下載 (${data.result.today_file_name})</span>`;
                     } else {
                         statusSpan.innerHTML = `<span style="color: var(--text-secondary);">今日無下載檔案</span>`;
                     }
@@ -858,7 +858,7 @@
                     body: JSON.stringify({ wearn_excel_url: url, wearn_cookies: cookies })
                 });
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
+                if (response.ok && data.status === 200) {
                     alert('下載設定儲存成功！');
                     fetchAceConfig();
                 } else {
@@ -896,8 +896,8 @@
                     body: formData
                 });
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    alert(`上傳成功！已同步 ${data.symbols.length} 檔選股股票。`);
+                if (response.ok && data.status === 200) {
+                    alert(`上傳成功！已同步 ${data.result.symbols.length} 檔選股股票。`);
                     fileInput.value = '';
                     fetchAceConfig();
                 } else {
@@ -926,7 +926,7 @@
                     }
                 });
                 const data = await response.json();
-                if (response.ok && data.status === 'success') {
+                if (response.ok && data.status === 200) {
                     alert(data.message);
                     fetchAceConfig();
                 } else {

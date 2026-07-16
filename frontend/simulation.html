@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>當沖模擬實驗室 - Antigravity Trader</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        // Synchronous Security Check before page rendering to prevent UI flash
+        if (!localStorage.getItem('token')) {
+            window.location.href = '/login.html';
+        }
+    </script>
+    <style>
+        /* Custom Premium Styles for Simulation Dashboard */
+        body {
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-main);
+        }
+
+        .simulation-page {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 16px;
+            flex-grow: 1;
+            overflow-y: auto;
+            height: calc(100vh - 50px);
+        }
+
+        /* Top Header Navigation Items */
+        .nav-links {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* Control & Configuration Panel */
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            align-items: end;
+        }
+
+        /* Metrics Grid Layout */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .metric-card {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--color-accent);
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: var(--color-accent);
+        }
+
+        .metric-card.pnl-card.positive::before {
+            background-color: var(--color-up);
+        }
+
+        .metric-card.pnl-card.negative::before {
+            background-color: var(--color-down);
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .metric-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* Table & Lists */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid transparent;
+        }
+
+        .status-badge.success {
+            background-color: rgba(255, 77, 77, 0.1);
+            color: var(--color-up);
+            border-color: rgba(255, 77, 77, 0.2);
+        }
+
+        .status-badge.stop_loss {
+            background-color: rgba(46, 189, 133, 0.1);
+            color: var(--color-down);
+            border-color: rgba(46, 189, 133, 0.2);
+        }
+
+        .status-badge.take_profit {
+            background-color: rgba(255, 77, 77, 0.15);
+            color: var(--color-up);
+            border-color: rgba(255, 77, 77, 0.3);
+            box-shadow: 0 0 8px rgba(255, 77, 77, 0.2);
+        }
+
+        .status-badge.not_traded {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .trend-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .trend-badge.bullish {
+            background-color: var(--color-up-bg);
+            color: var(--color-up);
+        }
+
+        .trend-badge.bearish {
+            background-color: var(--color-down-bg);
+            color: var(--color-down);
+        }
+
+        .trend-badge.none {
+            background-color: rgba(255,255,255,0.05);
+            color: var(--text-muted);
+        }
+
+        /* Action Buttons */
+        .btn-action {
+            background-color: var(--color-accent);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-action:hover {
+            background-color: var(--color-accent-hover);
+        }
+
+        .btn-action:active {
+            transform: scale(0.98);
+        }
+
+        .btn-action.btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .btn-action.btn-secondary:hover {
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-action.btn-run {
+            background: linear-gradient(135deg, #2962ff 0%, #00b0ff 100%);
+            box-shadow: 0 4px 12px rgba(41, 98, 255, 0.3);
+        }
+
+        .btn-action.btn-run:hover {
+            background: linear-gradient(135deg, #1e4bd8 0%, #0091ea 100%);
+        }
+
+        /* Modal styling overrides for Trades Log */
+        .trades-modal-content {
+            width: 800px !important;
+            max-width: 95vw;
+        }
+
+        .trades-table-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        /* Spinner for loading state */
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="logo-section">
+            <h1>ANTIGRAVITY 當沖模擬</h1>
+            <span style="font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 12px;">量化模擬實驗室</span>
+        </div>
+        
+        <!-- Navigation Links -->
+        <div class="nav-links">
+            <a href="/index.html" class="btn-tab">選股首頁</a>
+            <a href="/dashboard.html?symbol=2330.TW" class="btn-tab">個股看板</a>
+            <a href="/simulation.html" class="btn-tab active">當沖模擬</a>
+            <a href="/admin.html" id="link-admin-panel" style="display: none; color: #00d984; text-decoration: none; font-weight: 600;" class="btn-tab">管理員後台</a>
+        </div>
+
+        <!-- User Info / Profile -->
+        <div class="user-profile-section" style="display: flex; align-items: center; gap: 16px; font-size: 13px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="color: var(--text-secondary);">可用現金:</span>
+                <span id="header-user-cash" style="color: var(--color-accent); font-weight: 700; font-family: monospace;">$10,000,000</span>
+            </div>
+            <div id="btn-user-profile" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px;">
+                <span style="color: var(--text-secondary); font-weight: 600;" id="header-username">載入中...</span>
+            </div>
+            <button onclick="handleLogout()" class="btn-tab" style="padding: 4px 12px; font-size: 12px; cursor: pointer;">登出</button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main class="simulation-page">
+
+        <!-- Controls Configuration Panel -->
+        <section class="panel" style="display: flex !important; flex-direction: column !important; visibility: visible !important; flex-shrink: 0 !important; margin-bottom: 16px;">
+            <div class="panel-header">
+                <span>當沖模擬參數配置</span>
+                <span style="font-size: 11px; color: var(--text-muted); ">波峰波谷當沖演算法</span>
+            </div>
+            <div class="panel-body" style="padding: 16px; background-color: var(--bg-panel); display: block !important;">
+                <div class="config-grid">
+                    
+                    <!-- 1. Limit per Stock Input -->
+                    <div class="form-group">
+                        <label for="allocated-limit">每檔股票交易額度上限 (元)</label>
+                        <input type="number" id="allocated-limit" value="500000" step="50000" min="10000" 
+                               style="background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 8px 12px; border-radius: 4px; font-size:13px; font-family: var(--font-mono); width: 100%;">
+                    </div>
+
+                    <!-- 2. Simulation Date Descriptor -->
+                    <div class="form-group">
+                        <label>當沖實驗日範圍</label>
+                        <input type="text" value="日 Tick 數據 (最近交易日 09:00 ~ 13:30)" disabled 
+                               style="background: var(--bg-main); border: 1px solid var(--border-color); color: var(--text-muted); padding: 8px 12px; border-radius: 4px; font-size:13px; width: 100%; cursor: not-allowed; opacity: 0.8;">
+                    </div>
+
+                    <!-- Buttons Actions -->
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button type="button" id="btn-import" class="btn-action btn-secondary" onclick="triggerImport()" style="flex: 1; min-width: 180px;">
+                            <span id="import-spinner" class="spinner" style="display: none;"></span>
+                            <span id="import-btn-text">📥 匯入前50大 ticks 資料</span>
+                        </button>
+                        
+                        <button type="button" id="btn-run" class="btn-action btn-run" onclick="triggerSimulation()" style="flex: 1; min-width: 180px;">
+                            <span id="run-spinner" class="spinner" style="display: none;"></span>
+                            <span id="run-btn-text">⚡ 執行當沖交易模擬 (波峰波谷)</span>
+                        </button>
+
+                        <button type="button" id="btn-run-open" class="btn-action btn-run" onclick="triggerSimulationOpenBase()" style="flex: 1; min-width: 180px; background-color: #6f42c1;">
+                            <span id="run-open-spinner" class="spinner" style="display: none;"></span>
+                            <span id="run-open-btn-text">⚡ 執行當沖交易模擬 (開盤價多空)</span>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- Summary Metrics Dashboard -->
+        <section class="metrics-grid">
+            <!-- 1. Total PnL -->
+            <div class="metric-card pnl-card" id="metric-pnl-card">
+                <span class="metric-label">當期實驗總損益 (含稅費)</span>
+                <span class="metric-value" id="metric-total-pnl">$ 0</span>
+                <span class="metric-sub" id="metric-pnl-sub">勝率估算中...</span>
+            </div>
+
+            <!-- 2. Win Rate -->
+            <div class="metric-card" style="--color-accent: #ffb300;">
+                <span class="metric-label">個股交易勝率 (正損益)</span>
+                <span class="metric-value" id="metric-win-rate">0.00%</span>
+                <span class="metric-sub" id="metric-win-ratio">0 勝 / 0 敗</span>
+            </div>
+
+            <!-- 3. Traded Stocks -->
+            <div class="metric-card" style="--color-accent: #00d984;">
+                <span class="metric-label">模擬交易參與率</span>
+                <span class="metric-value" id="metric-traded-stocks">0 / 0</span>
+                <span class="metric-sub" id="metric-traded-sub">大於額度上限股則略過</span>
+            </div>
+
+            <!-- 4. Total Trades -->
+            <div class="metric-card" style="--color-accent: #8e2de2;">
+                <span class="metric-label">累積成交筆數</span>
+                <span class="metric-value" id="metric-total-trades">0</span>
+                <span class="metric-sub">單檔多次買賣累加</span>
+            </div>
+
+            <!-- 5. Fees & Taxes -->
+            <div class="metric-card" style="--color-accent: #e57373;">
+                <span class="metric-label">估算交易手續費與稅金</span>
+                <span class="metric-value" id="metric-cost">NT$ 0</span>
+                <span class="metric-sub" id="metric-cost-sub">手續費 2 折 + 證交稅 0.15%</span>
+            </div>
+        </section>
+
+        <!-- Simulation Result List Table -->
+        <section class="panel" style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 300px;">
+            <div class="panel-header">
+                <span>模擬實驗結果清單 (前50大成交量個股)</span>
+                <span id="results-count" style="font-size: 11px; color: var(--text-muted);">共 0 檔股票</span>
+            </div>
+            
+            <div class="panel-body" style="flex-grow: 1; overflow-y: auto;">
+                <table class="screener-list" style="font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th style="padding: 12px 10px;">股票代號</th>
+                            <th>名稱</th>
+                            <th style="text-align: right;">當日總量 (股)</th>
+                            <th style="text-align: right;">開盤價 (元)</th>
+                            <th style="text-align: right;">收盤價 (元)</th>
+                            <th style="text-align: right;">最高價 (元)</th>
+                            <th style="text-align: right;">最低價 (元)</th>
+                            <th style="text-align: center;">型態判定</th>
+                            <th style="text-align: center;">交易狀態</th>
+                            <th style="text-align: right; padding-right: 20px;">當沖損益金额</th>
+                            <th style="text-align: center;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="simulation-results-tbody">
+                        <tr>
+                            <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 50px;">
+                                尚未執行模擬。請先匯入 Tick 資料，再點擊「執行當沖交易模擬」...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        
+        <!-- Tick Size & Breakeven Reference Panel -->
+        <section class="panel" style="flex-shrink: 0; margin-top: 16px;">
+            <div class="panel-header">
+                <span>價格跳動與損益平衡對照表 (交易成本基本費率 0.1425% + 證交稅 0.15%)</span>
+                <span style="font-size: 11px; color: var(--text-muted);">價格區間對照 • 四捨五入至跳動單位</span>
+            </div>
+            <div class="panel-body" style="padding: 16px; background-color: var(--bg-panel);">
+                <table class="screener-list" style="font-size: 12px; width: 100%;">
+                    <thead>
+                        <tr style="background-color: var(--bg-header);">
+                            <th style="padding: 8px 10px;">價格區間 (元)</th>
+                            <th style="text-align: right;">跳動單位 (元)</th>
+                            <th style="text-align: right;">範例價格 (元)</th>
+                            <th style="text-align: right; color: var(--color-up); font-weight: bold;">3折損益平衡價 (元)</th>
+                            <th style="text-align: right; color: #ffaa00; font-weight: bold;">2折損益平衡價 (元)</th>
+                            <th style="text-align: right; color: var(--color-down); font-weight: bold;">1折損益平衡價 (元)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tick-rules-tbody">
+                        <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 15px;">讀取對照表資料中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Trades Log Detail Overlay Modal -->
+    <div class="modal-overlay" id="trades-modal" style="display: none;">
+        <div class="trading-modal trades-modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">個股交易明細 - 載入中...</h2>
+                <button type="button" class="btn-close-modal" onclick="closeTradesModal()">×</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div class="trades-table-container">
+                    <table class="screener-list" style="font-size: 12px; width: 100%;">
+                        <thead>
+                            <tr style="background-color: var(--bg-header);">
+                                <th style="padding: 8px 10px;">交易時間</th>
+                                <th>序號</th>
+                                <th>動作</th>
+                                <th>型態</th>
+                                <th style="text-align: center;">盤別 (內/外盤)</th>
+                                <th style="text-align: right;">價格 (元)</th>
+                                <th style="text-align: right;">數量 (股)</th>
+                                <th style="text-align: right;">手續費</th>
+                                <th style="text-align: right;">證交稅</th>
+                                <th style="text-align: right; padding-right: 15px;">損益</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-log-tbody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Block for APIs and Logic UI -->
+    <script>
+        const token = localStorage.getItem('token');
+
+        // Page Init
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserProfile();
+            loadSimulationResults();
+            loadTickRules();
+        });
+
+        // Handle Log out
+        function handleLogout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            localStorage.removeItem('role');
+            window.location.href = '/login.html';
+        }
+
+        // Fetch User Info to display in Header
+        async function loadUserProfile() {
+            try {
+                const response = await fetch('/api/user/profile', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                if (response.ok && res.result) {
+                    document.getElementById('header-username').textContent = res.result.username;
+                    
+                    if (res.result.role === 'admin') {
+                        document.getElementById('link-admin-panel').style.display = 'inline-block';
+                    }
+                    
+                    // Fetch cash separately
+                    const cashResponse = await fetch('/api/inventory', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const cashRes = await cashResponse.json();
+                    if (cashResponse.ok && cashRes.result) {
+                        const cashVal = cashRes.result.summary.cash;
+                        document.getElementById('header-user-cash').textContent = '$' + cashVal.toLocaleString();
+                    }
+                } else {
+                    handleLogout();
+                }
+            } catch (err) {
+                console.error("Failed to load user profile:", err);
+            }
+        }
+
+        // Fetch Tick Rules and Breakeven prices for Reference
+        async function loadTickRules() {
+            try {
+                const response = await fetch('/api/simulation/tick-rules', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                if (response.ok && res.result) {
+                    const tbody = document.getElementById('tick-rules-tbody');
+                    let rowsHtml = '';
+                    res.result.forEach(r => {
+                        const min = r.price_min.toLocaleString();
+                        const max = r.price_max >= 999999 ? '以上' : ` ~ ${r.price_max.toLocaleString()}`;
+                        rowsHtml += `
+                            <tr>
+                                <td style="padding: 10px 10px; font-family: var(--font-mono);">${min}${max}</td>
+                                <td style="text-align: right;" class="mono">${r.tick_size.toFixed(2)}</td>
+                                <td style="text-align: right;" class="mono">${r.example_price.toFixed(2)}</td>
+                                <td style="text-align: right; font-weight: bold; color: var(--color-up);" class="mono">${r.breakeven_30.toFixed(2)}</td>
+                                <td style="text-align: right; font-weight: bold; color: #ffaa00;" class="mono">${r.breakeven_20.toFixed(2)}</td>
+                                <td style="text-align: right; font-weight: bold; color: var(--color-down);" class="mono">${r.breakeven_10.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    });
+                    tbody.innerHTML = rowsHtml;
+                }
+            } catch (err) {
+                console.error("Failed to load tick rules:", err);
+            }
+        }
+
+        // Load current simulation results
+        async function loadSimulationResults() {
+            try {
+                const response = await fetch('/api/simulation/results', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                if (response.ok && res.result) {
+                    renderSummary(res.result);
+                }
+            } catch (err) {
+                console.error("Failed to load simulation results:", err);
+            }
+        }
+
+        // Trigger Import Tick Data
+        async function triggerImport() {
+            const btn = document.getElementById('btn-import');
+            const spinner = document.getElementById('import-spinner');
+            const text = document.getElementById('import-btn-text');
+            const btnRun = document.getElementById('btn-run');
+            const btnRunOpen = document.getElementById('btn-run-open');
+
+            btn.disabled = true;
+            btnRun.disabled = true;
+            if (btnRunOpen) btnRunOpen.disabled = true;
+            spinner.style.display = 'inline-block';
+            text.textContent = ' 正在讀取並匯入Ticks...';
+
+            try {
+                const response = await fetch('/api/simulation/import', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                
+                if (response.ok) {
+                    alert(res.result.message || 'Ticks 匯入成功！');
+                    loadSimulationResults();
+                } else {
+                    alert('匯入失敗: ' + (res.detail || '未知錯誤'));
+                }
+            } catch (err) {
+                alert('網路請求失敗: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btnRun.disabled = false;
+                if (btnRunOpen) btnRunOpen.disabled = false;
+                spinner.style.display = 'none';
+                text.textContent = '📥 匯入前50大 ticks 資料';
+            }
+        }
+
+        // Trigger Trading Simulation Run
+        async function triggerSimulation() {
+            const limitVal = parseFloat(document.getElementById('allocated-limit').value);
+            if (isNaN(limitVal) || limitVal < 1000) {
+                alert('請輸入正確的每檔額度上限 (最低 1,000 元)');
+                return;
+            }
+
+            const btn = document.getElementById('btn-run');
+            const spinner = document.getElementById('run-spinner');
+            const text = document.getElementById('run-btn-text');
+            const btnImport = document.getElementById('btn-import');
+            const btnRunOpen = document.getElementById('btn-run-open');
+
+            btn.disabled = true;
+            btnImport.disabled = true;
+            if (btnRunOpen) btnRunOpen.disabled = true;
+            spinner.style.display = 'inline-block';
+            text.textContent = ' 正在計算波峰波谷與交易...';
+
+            try {
+                const response = await fetch('/api/simulation/run', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ allocated_limit: limitVal })
+                });
+                const res = await response.json();
+                
+                if (response.ok) {
+                    loadSimulationResults();
+                } else {
+                    alert('模擬失敗: ' + (res.detail || '未知錯誤'));
+                }
+            } catch (err) {
+                alert('網路請求失敗: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btnImport.disabled = false;
+                if (btnRunOpen) btnRunOpen.disabled = false;
+                spinner.style.display = 'none';
+                text.textContent = '⚡ 執行當沖交易模擬 (波峰波谷)';
+            }
+        }
+
+        // Trigger Trading Simulation Run - Open Price Base
+        async function triggerSimulationOpenBase() {
+            const limitVal = parseFloat(document.getElementById('allocated-limit').value);
+            if (isNaN(limitVal) || limitVal < 1000) {
+                alert('請輸入正確的每檔額度上限 (最低 1,000 元)');
+                return;
+            }
+
+            const btn = document.getElementById('btn-run-open');
+            const spinner = document.getElementById('run-open-spinner');
+            const text = document.getElementById('run-open-btn-text');
+            const btnImport = document.getElementById('btn-import');
+            const btnRun = document.getElementById('btn-run');
+
+            btn.disabled = true;
+            btnImport.disabled = true;
+            btnRun.disabled = true;
+            spinner.style.display = 'inline-block';
+            text.textContent = ' 正在計算開盤價多空與交易...';
+
+            try {
+                const response = await fetch('/api/simulation/run-open-base', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ allocated_limit: limitVal })
+                });
+                const res = await response.json();
+                
+                if (response.ok) {
+                    loadSimulationResults();
+                } else {
+                    alert('模擬失敗: ' + (res.detail || '未知錯誤'));
+                }
+            } catch (err) {
+                alert('網路請求失敗: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btnImport.disabled = false;
+                btnRun.disabled = false;
+                spinner.style.display = 'none';
+                text.textContent = '⚡ 執行當沖交易模擬 (開盤價多空)';
+            }
+        }
+
+        // Render Summary Stats and Stock Table Rows
+        function renderSummary(data) {
+            const metrics = data.metrics;
+            const summaries = data.summaries;
+
+            // Render Metrics Cards
+            const pnlCard = document.getElementById('metric-pnl-card');
+            const totalPnlSpan = document.getElementById('metric-total-pnl');
+            const pnlSub = document.getElementById('metric-pnl-sub');
+
+            // Format profit
+            const formattedPnl = metrics.total_pnl.toLocaleString();
+            if (metrics.total_pnl > 0) {
+                pnlCard.className = 'metric-card pnl-card positive';
+                totalPnlSpan.textContent = `+ NT$ ${formattedPnl}`;
+                totalPnlSpan.style.color = 'var(--color-up)'; // red
+            } else if (metrics.total_pnl < 0) {
+                pnlCard.className = 'metric-card pnl-card negative';
+                totalPnlSpan.textContent = `- NT$ ${Math.abs(metrics.total_pnl).toLocaleString()}`;
+                totalPnlSpan.style.color = 'var(--color-down)'; // green
+            } else {
+                pnlCard.className = 'metric-card pnl-card';
+                totalPnlSpan.textContent = `NT$ 0`;
+                totalPnlSpan.style.color = 'var(--text-primary)';
+            }
+            
+            pnlSub.textContent = `勝率: ${metrics.win_rate}% | 已交易: ${metrics.traded_stocks} 檔`;
+
+            document.getElementById('metric-win-rate').textContent = `${metrics.win_rate}%`;
+            document.getElementById('metric-win-ratio').textContent = `${metrics.win_count} 勝 / ${metrics.loss_count} 敗`;
+            
+            document.getElementById('metric-traded-stocks').textContent = `${metrics.traded_stocks} / ${metrics.total_stocks}`;
+            document.getElementById('metric-traded-sub').textContent = `共 ${metrics.total_stocks} 檔已讀入`;
+
+            document.getElementById('metric-total-trades').textContent = metrics.total_trades;
+
+            const costVal = metrics.total_fee + metrics.total_tax;
+            document.getElementById('metric-cost').textContent = `NT$ ${costVal.toLocaleString()}`;
+            document.getElementById('metric-cost-sub').textContent = `費: $${metrics.total_fee.toLocaleString()} | 稅: $${metrics.total_tax.toLocaleString()}`;
+
+            // Render Table Rows
+            const tbody = document.getElementById('simulation-results-tbody');
+            document.getElementById('results-count').textContent = `共 ${summaries.length} 檔股票`;
+            
+            if (summaries.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 50px;">
+                            尚未執行模擬。請先匯入 Tick 資料，再點擊「執行當沖交易模擬」...
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let rowsHtml = '';
+            summaries.forEach(s => {
+                // Formatting fields
+                const symbol = s.symbol;
+                const name = s.name;
+                const volume = s.volume ? s.volume.toLocaleString() : '0';
+                const open_p = s.open_price.toFixed(2);
+                const close_p = s.close_price.toFixed(2);
+                const high_p = s.high_price.toFixed(2);
+                const low_p = s.low_price.toFixed(2);
+                
+                // Trend Class
+                let trendBadge = `<span class="trend-badge none">-</span>`;
+                if (s.trend === 'BULLISH') {
+                    trendBadge = `<span class="trend-badge bullish">偏多</span>`;
+                } else if (s.trend === 'BEARISH') {
+                    trendBadge = `<span class="trend-badge bearish">偏空</span>`;
+                }
+
+                // Status Badge
+                let statusBadge = `<span class="status-badge not_traded">未交易</span>`;
+                if (s.status === 'SUCCESS') {
+                    statusBadge = `<span class="status-badge success">完成當沖</span>`;
+                } else if (s.status === 'STOP_LOSS') {
+                    statusBadge = `<span class="status-badge stop_loss">停損出場</span>`;
+                } else if (s.status === 'TAKE_PROFIT') {
+                    statusBadge = `<span class="status-badge take_profit">停利出場</span>`;
+                }
+
+                // PnL amount color & formatting
+                let pnlStyleClass = '';
+                let pnlText = `NT$ ${s.pnl.toLocaleString()}`;
+                if (s.pnl > 0) {
+                    pnlStyleClass = 'up';
+                    pnlText = `+ $${s.pnl.toLocaleString()}`;
+                } else if (s.pnl < 0) {
+                    pnlStyleClass = 'down';
+                    pnlText = `- $${Math.abs(s.pnl).toLocaleString()}`;
+                } else {
+                    pnlText = `$0`;
+                }
+
+                // Action Link
+                const actionButton = s.status !== 'NOT_TRADED' 
+                    ? `<button class="btn-tab" onclick="viewTradesLog('${symbol}', '${name}')">🔎 交易明細</button>`
+                    : `<span style="color: var(--text-muted); font-size: 11px;">額度不足</span>`;
+
+                rowsHtml += `
+                    <tr>
+                        <td style="padding: 12px 10px; font-family: var(--font-mono); font-weight: bold; color: var(--color-accent);">${symbol}</td>
+                        <td>${name}</td>
+                        <td style="text-align: right;" class="mono">${volume}</td>
+                        <td style="text-align: right;" class="mono">${open_p}</td>
+                        <td style="text-align: right;" class="mono">${close_p}</td>
+                        <td style="text-align: right;" class="mono">${high_p}</td>
+                        <td style="text-align: right;" class="mono">${low_p}</td>
+                        <td style="text-align: center;">${trendBadge}</td>
+                        <td style="text-align: center;">${statusBadge}</td>
+                        <td style="text-align: right; padding-right: 20px; font-weight: bold;" class="${pnlStyleClass} mono">${pnlText}</td>
+                        <td style="text-align: center;">${actionButton}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = rowsHtml;
+        }
+
+        // View trades log in modal for a specific stock
+        async function viewTradesLog(symbol, name) {
+            const modal = document.getElementById('trades-modal');
+            const title = document.getElementById('modal-title');
+            const tbody = document.getElementById('trades-log-tbody');
+
+            title.textContent = `個股當沖明細 - ${symbol} (${name})`;
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 20px;">載入中...</td></tr>';
+            modal.style.display = 'flex';
+
+            try {
+                const response = await fetch(`/api/simulation/trades/${symbol}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                
+                if (response.ok && res.result && res.result.trades) {
+                    const trades = res.result.trades;
+                    if (trades.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-muted); padding: 20px;">本股在此時段沒有觸發買賣點</td></tr>';
+                        return;
+                    }
+
+                    let rowsHtml = '';
+                    trades.forEach(t => {
+                        const time = t.timestamp;
+                        const tradeId = t.trade_id;
+                        
+                        // Action styling
+                        let actText = '';
+                        let actClass = '';
+                        if (t.action === 'BUY') {
+                            actText = '買進';
+                            actClass = 'down'; // Green in Taiwan (Buy)
+                        } else {
+                            actText = '賣出';
+                            actClass = 'up'; // Red in Taiwan (Sell)
+                        }
+                        
+                        // Type translation
+                        let typeText = t.trade_type;
+                        if (t.trade_type === 'LONG_OPEN') typeText = '做多開倉';
+                        else if (t.trade_type === 'LONG_CLOSE') typeText = '做多平倉';
+                        else if (t.trade_type === 'SHORT_OPEN') typeText = '做空開倉';
+                        else if (t.trade_type === 'SHORT_CLOSE') typeText = '做空平倉';
+
+                        // Tick Type translation
+                        let tickTypeHtml = '-';
+                        if (t.tick_type === 'OUTER') {
+                            tickTypeHtml = `<span style="color: var(--color-up); font-weight: bold; background: rgba(255, 77, 77, 0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">外盤</span>`;
+                        } else if (t.tick_type === 'INNER') {
+                            tickTypeHtml = `<span style="color: var(--color-down); font-weight: bold; background: rgba(46, 189, 133, 0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">內盤</span>`;
+                        }
+
+                        const price = t.price.toFixed(2);
+                        const qty = t.qty.toLocaleString();
+                        const fee = t.fee.toLocaleString();
+                        const tax = t.tax.toLocaleString();
+                        
+                        // PnL logic for individual close logs
+                        let pnlText = '-';
+                        let pnlClass = '';
+                        if (t.trade_type.endsWith('CLOSE')) {
+                            if (t.pnl > 0) {
+                                pnlClass = 'up';
+                                pnlText = `+$${t.pnl.toLocaleString()}`;
+                            } else if (t.pnl < 0) {
+                                pnlClass = 'down';
+                                pnlText = `-$${Math.abs(t.pnl).toLocaleString()}`;
+                            } else {
+                                pnlText = '$0';
+                            }
+                        }
+
+                        rowsHtml += `
+                            <tr>
+                                <td style="padding: 8px 10px;" class="mono">${time}</td>
+                                <td class="mono" style="color: var(--text-muted);">${tradeId}</td>
+                                <td class="${actClass}" style="font-weight: bold;">${actText}</td>
+                                <td style="color: var(--text-secondary);">${typeText}</td>
+                                <td style="text-align: center;">${tickTypeHtml}</td>
+                                <td style="text-align: right;" class="mono">${price}</td>
+                                <td style="text-align: right;" class="mono">${qty}</td>
+                                <td style="text-align: right; color: var(--text-muted);" class="mono">$${fee}</td>
+                                <td style="text-align: right; color: var(--text-muted);" class="mono">$${tax}</td>
+                                <td style="text-align: right; padding-right: 15px; font-weight: bold;" class="${pnlClass} mono">${pnlText}</td>
+                            </tr>
+                        `;
+                    });
+                    tbody.innerHTML = rowsHtml;
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--color-up); padding: 20px;">載入明細失敗</td></tr>';
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--color-up); padding: 20px;">請求出錯: ${err.message}</td></tr>`;
+            }
+        }
+
+        // Close modal for trades logs
+        function closeTradesModal() {
+            document.getElementById('trades-modal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

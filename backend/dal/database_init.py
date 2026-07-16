@@ -4,6 +4,19 @@ import uuid
 from common.logger import logger
 from common.base_dao import BaseDAO, OperationalError, DatabaseError
 
+def column_exists(cursor, table_name: str, column_name: str) -> bool:
+    db_type = os.getenv("DB_TYPE", "sqlite").lower()
+    if db_type == "postgres":
+        cursor.execute("""
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = ? AND column_name = ?
+        """, (table_name.lower(), column_name.lower()))
+        return cursor.fetchone() is not None
+    else:
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [row[1] for row in cursor.fetchall()]
+        return any(c.lower() == column_name.lower() for c in columns)
+
 def init_db():
     """Initializes the database schema and seeds default data if tables are empty."""
     conn = BaseDAO.get_connection()
@@ -64,14 +77,15 @@ def init_db():
         ("profile_pic", "TEXT"), 
         ("is_active", "INTEGER DEFAULT 1")
     ]:
-        try:
-            cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
-            conn.commit()
-        except DatabaseError:
+        if not column_exists(cursor, "users", col):
             try:
-                conn.rollback()
-            except Exception:
-                pass
+                cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+                conn.commit()
+            except DatabaseError:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
     # 2. Account table
     cursor.execute("""
@@ -155,15 +169,16 @@ def init_db():
     conn.commit()
     
     # stockId migration
-    try:
-        cursor.execute("ALTER TABLE stock_metadata ADD COLUMN stockId INTEGER DEFAULT 0")
-        conn.commit()
-    except DatabaseError as e:
-        logger.debug(f"[Database] Migration note for stockId: {e}")
+    if not column_exists(cursor, "stock_metadata", "stockId"):
         try:
-            conn.rollback()
-        except Exception:
-            pass
+            cursor.execute("ALTER TABLE stock_metadata ADD COLUMN stockId INTEGER DEFAULT 0")
+            conn.commit()
+        except DatabaseError as e:
+            logger.debug(f"[Database] Migration note for stockId: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
     # Run stock metadata migrations for the 11 new columns
     for col, col_type in [
@@ -179,15 +194,16 @@ def init_db():
         ("revenue_growth", "REAL"),
         ("updateDate", "TEXT")
     ]:
-        try:
-            cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col} {col_type}")
-            conn.commit()
-        except DatabaseError as e:
-            logger.warning(f"[Database] Migration failed for column {col}: {e}")
+        if not column_exists(cursor, "stock_metadata", col):
             try:
-                conn.rollback()
-            except Exception:
-                pass
+                cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col} {col_type}")
+                conn.commit()
+            except DatabaseError as e:
+                logger.warning(f"[Database] Migration failed for column {col}: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
     
     # Run ace watchlist migrations for the 5 new strategy characteristics columns
     for col, col_type in [
@@ -198,27 +214,29 @@ def init_db():
         ("rebound_sprint", "TEXT"),
         ("create_date", "TIMESTAMP")
     ]:
-        try:
-            cursor.execute(f"ALTER TABLE ace_watchlist ADD COLUMN {col} {col_type}")
-            conn.commit()
-        except DatabaseError as e:
-            logger.debug(f"[Database] Migration note for ace_watchlist.{col}: {e}")
+        if not column_exists(cursor, "ace_watchlist", col):
             try:
-                conn.rollback()
-            except Exception:
-                pass
+                cursor.execute(f"ALTER TABLE ace_watchlist ADD COLUMN {col} {col_type}")
+                conn.commit()
+            except DatabaseError as e:
+                logger.debug(f"[Database] Migration note for ace_watchlist.{col}: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
     # Drop obsolete columns from ace_watchlist
     for col in ["strength", "level_val", "chips", "volume_score", "eat_score"]:
-        try:
-            cursor.execute(f"ALTER TABLE ace_watchlist DROP COLUMN IF EXISTS {col}")
-            conn.commit()
-        except DatabaseError as e:
-            logger.debug(f"[Database] Skip dropping column {col}: {e}")
+        if column_exists(cursor, "ace_watchlist", col):
             try:
-                conn.rollback()
-            except Exception:
-                pass
+                cursor.execute(f"ALTER TABLE ace_watchlist DROP COLUMN {col}")
+                conn.commit()
+            except DatabaseError as e:
+                logger.debug(f"[Database] Skip dropping column {col}: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 
     # Remove old 'INTEL' symbol
     cursor.execute("DELETE FROM stock_metadata WHERE symbol = 'INTEL'")
@@ -298,6 +316,113 @@ def init_db():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, default_stocks_with_id)
         
+    # Create day trading tables
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS day_trading_ticks (
+            symbol TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            price REAL NOT NULL,
+            volume INTEGER NOT NULL,
+            tick_type TEXT NOT NULL DEFAULT 'OUTER',
+            PRIMARY KEY (symbol, timestamp)
+        )
+    """)
+    if not column_exists(cursor, "day_trading_ticks", "tick_type"):
+        cursor.execute("ALTER TABLE day_trading_ticks ADD COLUMN tick_type TEXT NOT NULL DEFAULT 'OUTER'")
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS day_trading_trades (
+            trade_id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            action TEXT NOT NULL,
+            trade_type TEXT NOT NULL,
+            price REAL NOT NULL,
+            qty INTEGER NOT NULL,
+            fee REAL NOT NULL,
+            tax REAL NOT NULL,
+            pnl REAL NOT NULL DEFAULT 0.0,
+            timestamp TEXT NOT NULL,
+            tick_type TEXT NOT NULL DEFAULT 'OUTER'
+        )
+    """)
+    if not column_exists(cursor, "day_trading_trades", "tick_type"):
+        cursor.execute("ALTER TABLE day_trading_trades ADD COLUMN tick_type TEXT NOT NULL DEFAULT 'OUTER'")
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS day_trading_summary (
+            username TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            name TEXT NOT NULL,
+            volume INTEGER NOT NULL,
+            open_price REAL NOT NULL,
+            close_price REAL NOT NULL,
+            high_price REAL NOT NULL,
+            low_price REAL NOT NULL,
+            pnl REAL NOT NULL DEFAULT 0.0,
+            trend TEXT NOT NULL,
+            status TEXT NOT NULL,
+            PRIMARY KEY (username, symbol)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS day_trading_tick_rules (
+            rule_id INTEGER PRIMARY KEY,
+            price_min REAL NOT NULL,
+            price_max REAL NOT NULL,
+            tick_size REAL NOT NULL,
+            example_price REAL NOT NULL,
+            breakeven_30 REAL NOT NULL,
+            breakeven_20 REAL NOT NULL,
+            breakeven_10 REAL NOT NULL
+        )
+    """)
     conn.commit()
+
+    # Seed tick rules if empty
+    cursor.execute("SELECT COUNT(*) FROM day_trading_tick_rules")
+    if cursor.fetchone()[0] == 0:
+        import math
+        
+        def get_tick_size_local(p):
+            if p < 10: return 0.01
+            elif p < 50: return 0.05
+            elif p < 100: return 0.10
+            elif p < 500: return 0.50
+            elif p < 1000: return 1.00
+            else: return 5.00
+            
+        def calc_breakeven_local(p, disc):
+            comm = 0.001425 * disc
+            factor = (1 + comm) / (1 - comm - 0.0015)
+            raw_be = p * factor
+            t = get_tick_size_local(raw_be)
+            ticks = math.ceil(raw_be / t)
+            return round(ticks * t, 2)
+            
+        intervals = [
+            (0.0, 10.0, 0.01, 5.0),
+            (10.0, 50.0, 0.05, 10.0),
+            (50.0, 100.0, 0.10, 50.0),
+            (100.0, 500.0, 0.50, 100.0),
+            (500.0, 1000.0, 1.00, 500.0),
+            (1000.0, 999999.0, 5.00, 1000.0)
+        ]
+        
+        seed_data = []
+        for idx, (p_min, p_max, t_size, ex_p) in enumerate(intervals, start=1):
+            be_30 = calc_breakeven_local(ex_p, 0.3)
+            be_20 = calc_breakeven_local(ex_p, 0.2)
+            be_10 = calc_breakeven_local(ex_p, 0.1)
+            seed_data.append((idx, p_min, p_max, t_size, ex_p, be_30, be_20, be_10))
+            
+        cursor.executemany("""
+            INSERT INTO day_trading_tick_rules (
+                rule_id, price_min, price_max, tick_size, example_price, breakeven_30, breakeven_20, breakeven_10
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, seed_data)
+        conn.commit()
+    
     conn.close()
     logger.info("[Database] Schema initialized successfully.")
