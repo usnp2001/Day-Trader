@@ -15,7 +15,8 @@ const state = {
         total_pnl: 0.0
     },
     ws: null,
-    chartManager: null
+    chartManager: null,
+    uplotManager: null
 };
 
 const API_BASE_URL = `${window.location.protocol}//${window.location.host}`;
@@ -34,6 +35,11 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Bind click coordinate handler from chart to open order modal
     state.chartManager.onChartClick((price) => {
+        openTradingModal("BUY", price);
+    });
+
+    state.uplotManager = new UPlotChartManager("uplot-chart");
+    state.uplotManager.onChartClick((price) => {
         openTradingModal("BUY", price);
     });
 
@@ -209,6 +215,44 @@ async function fetchOrders() {
 
 async function fetchKlineHistory() {
     try {
+        if (state.selectedInterval === "ticks") {
+            // Hide TradingView charts and indicators, show uPlot chart container
+            document.getElementById("tradingview-chart").style.display = "none";
+            document.getElementById("indicator-header").style.display = "none";
+            document.getElementById("indicator-chart").style.display = "none";
+            document.getElementById("uplot-chart").style.display = "block";
+
+            // Fetch 1m K-line history to seed uPlot initial data points
+            const res = await fetch(`${API_BASE_URL}/api/kline/${state.selectedSymbol}?interval=1m`, {
+                headers: getAuthHeaders()
+            });
+            if (res.status === 401) {
+                handleLogout();
+                return;
+            }
+            const json = await res.json();
+            if (json.status === 200) {
+                const klineData = json.result.data;
+                const initialTicks = klineData.map(d => ({
+                    time: d.time,
+                    price: d.close
+                }));
+                state.uplotManager.initChart(initialTicks);
+
+                const lastCandle = klineData[klineData.length - 1];
+                if (lastCandle) {
+                    updateChartOverlay(lastCandle.close, 0.0);
+                }
+            }
+            return;
+        }
+
+        // Standard intervals: show TradingView and indicators, hide uPlot
+        document.getElementById("tradingview-chart").style.display = "block";
+        document.getElementById("indicator-header").style.display = "flex";
+        document.getElementById("indicator-chart").style.display = "block";
+        document.getElementById("uplot-chart").style.display = "none";
+
         const res = await fetch(`${API_BASE_URL}/api/kline/${state.selectedSymbol}?interval=${state.selectedInterval}`, {
             headers: getAuthHeaders()
         });
@@ -280,7 +324,16 @@ function connectWebSocket() {
 }
 
 function handleLiveMarketPacket(data) {
-    state.chartManager.updateTick(data.tick);
+    // Ensure tick object has the transaction timestamp
+    if (data.tick && !data.tick.time) {
+        data.tick.time = data.time;
+    }
+
+    if (state.selectedInterval === "ticks") {
+        state.uplotManager.addTick(data.tick.time, data.tick.price);
+    } else {
+        state.chartManager.updateTick(data.tick);
+    }
 
     const stock = state.screenerStocks.find(s => s.symbol === data.symbol);
     const prevClose = stock ? (data.price - stock.change) : data.price;

@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="styles.css">
     <!-- Load TradingView Lightweight Charts CDN library (version locked) -->
     <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Load uPlot CDN library -->
+    <link rel="stylesheet" href="https://unpkg.com/uplot/dist/uPlot.min.css">
+    <script src="https://unpkg.com/uplot/dist/uPlot.iife.min.js"></script>
     <script>
         // Synchronous Security Check before page rendering to prevent UI flash
         if (!localStorage.getItem('token')) {
@@ -71,7 +74,7 @@
             <button onclick="handleLogout()" class="btn-tab" style="padding: 4px 12px; font-size: 12px; cursor: pointer;">登出</button>
         </div>
     </header>
-
+ 
     <!-- Workspace Dashboard Grid -->
     <div class="workspace">
         
@@ -86,6 +89,7 @@
                     <button class="btn-tab active" data-val="1d">日K</button>
                     <button class="btn-tab" data-val="1wk">周K</button>
                     <button class="btn-tab" data-val="1mo">月K</button>
+                    <button class="btn-tab" data-val="ticks">Ticks圖</button>
                 </div>
             </div>
             <div class="panel-body" style="background-color: #161b25;">
@@ -96,9 +100,12 @@
                     </div>
                     <!-- Chart canvas container -->
                     <div id="tradingview-chart"></div>
+
+                    <!-- uPlot Chart container -->
+                    <div id="uplot-chart" style="display: none; flex-grow: 1; width: 100%; min-height: 250px;"></div>
                     
                     <!-- Sub Indicator Panel -->
-                    <div class="panel-header" style="height: 28px; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">
+                    <div class="panel-header" id="indicator-header" style="height: 28px; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">
                         <span>技術指標</span>
                         <div class="chart-controls" id="indicator-controls">
                             <button class="btn-tab active" data-val="KD">KD (9,3,3)</button>

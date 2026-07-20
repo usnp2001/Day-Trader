@@ -420,3 +420,168 @@ function roundToTick(price) {
 
     return Math.round(price / tickSize) * tickSize;
 }
+
+class UPlotChartManager {
+    constructor(containerId) {
+        this.container = document.getElementById(containerId);
+        this.uplot = null;
+        this.data = [[], []]; // [timestamps, prices]
+        this.clickCallback = null;
+        
+        // Listen to resize events and adjust uPlot size dynamically
+        window.addEventListener('resize', () => {
+            if (this.uplot && this.container.style.display !== "none") {
+                const w = this.container.clientWidth;
+                const h = this.container.clientHeight;
+                if (w > 0 && h > 0) {
+                    this.uplot.setSize({ width: w, height: h });
+                }
+            }
+        });
+    }
+
+    onChartClick(callback) {
+        this.clickCallback = callback;
+    }
+
+    _parseTimeString(timeStr) {
+        if (!timeStr) return Math.floor(Date.now() / 1000);
+        const parts = timeStr.split(':');
+        if (parts.length < 3) return Math.floor(Date.now() / 1000);
+        
+        const now = new Date();
+        now.setHours(parseInt(parts[0], 10));
+        now.setMinutes(parseInt(parts[1], 10));
+        now.setSeconds(parseInt(parts[2], 10));
+        now.setMilliseconds(0);
+        return Math.floor(now.getTime() / 1000);
+    }
+
+    initChart(initialTicks) {
+        // Destroy existing uPlot instance to avoid duplicate canvas overlays
+        if (this.uplot) {
+            this.uplot.destroy();
+            this.uplot = null;
+        }
+
+        this.container.innerHTML = "";
+
+        // Format data: uPlot expects [[timestamps], [prices]]
+        if (initialTicks && initialTicks.length > 0) {
+            this.data = [
+                initialTicks.map(t => typeof t.time === 'number' ? t.time : this._parseTimeString(t.time)),
+                initialTicks.map(t => t.price)
+            ];
+        } else {
+            const nowSec = Math.floor(Date.now() / 1000);
+            this.data = [[nowSec], [0.0]];
+        }
+
+        const width = this.container.clientWidth || 800;
+        const height = this.container.clientHeight || 350;
+
+        const opts = {
+            width: width,
+            height: height,
+            title: "",
+            id: "uplot-canvas-core",
+            class: "uplot-chart-custom",
+            scales: {
+                x: {
+                    time: true,
+                },
+                y: {
+                    auto: true,
+                }
+            },
+            series: [
+                {
+                    // X-axis Time formatting
+                    value: (self, rawValue) => {
+                        if (!rawValue) return "";
+                        const d = new Date(rawValue * 1000);
+                        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                    }
+                },
+                {
+                    // Y-axis Price formatting (light-blue stroke area chart)
+                    stroke: "#00b0ff",
+                    width: 2,
+                    fill: "rgba(0, 176, 255, 0.05)",
+                    label: "價格",
+                    value: (self, rawValue) => "NT$ " + (rawValue ? rawValue.toFixed(2) : "0.00"),
+                }
+            ],
+            axes: [
+                {
+                    stroke: "#b2b5be",
+                    grid: {
+                        stroke: "#2a2e39",
+                        width: 1,
+                    },
+                    size: 40,
+                },
+                {
+                    stroke: "#b2b5be",
+                    grid: {
+                        stroke: "#2a2e39",
+                        width: 1,
+                    },
+                    values: (self, ticks) => ticks.map(v => v.toFixed(2))
+                }
+            ],
+            cursor: {
+                show: true,
+                points: {
+                    show: true,
+                    size: 6,
+                    stroke: "#fff",
+                    fill: "#00b0ff"
+                },
+                drag: {
+                    setScale: false
+                }
+            }
+        };
+
+        this.uplot = new uPlot(opts, this.data, this.container);
+
+        // Setup mouse click coordinate handler on uPlot interaction area
+        const over = this.uplot.root.querySelector(".u-over");
+        if (over) {
+            over.addEventListener("click", () => {
+                if (this.uplot && this.uplot.cursor.left !== null && this.uplot.cursor.top !== null && this.clickCallback) {
+                    const price = this.uplot.posToVal(this.uplot.cursor.top, "y");
+                    if (price && price > 0) {
+                        this.clickCallback(roundToTick(price));
+                    }
+                }
+            });
+        }
+    }
+
+    addTick(tickTime, tickPrice) {
+        if (!this.uplot) return;
+
+        let timestamp = (typeof tickTime === 'number') ? tickTime : this._parseTimeString(tickTime);
+        const xData = this.data[0];
+        const yData = this.data[1];
+
+        // uPlot requires strictly increasing x values
+        if (xData.length > 0 && timestamp <= xData[xData.length - 1]) {
+            timestamp = xData[xData.length - 1] + 1;
+        }
+
+        xData.push(timestamp);
+        yData.push(tickPrice);
+
+        // Limit tick history size to prevent canvas latency
+        if (xData.length > 300) {
+            xData.shift();
+            yData.shift();
+        }
+
+        this.uplot.setData(this.data);
+    }
+}
+

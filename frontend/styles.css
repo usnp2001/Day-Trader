@@ -800,3 +800,29 @@ header {
     transform: translateY(1px);
     box-shadow: 0 2px 8px rgba(142, 45, 226, 0.4);
 }
+
+/* uPlot Custom Styles for Dark Theme */
+.uplot-chart-custom {
+    font-family: var(--font-mono) !important;
+}
+
+.uplot .u-cursor-x,
+.uplot .u-cursor-y {
+    border-color: #708090 !important;
+    border-style: dashed !important;
+}
+
+.uplot .u-legend {
+    color: var(--text-secondary) !important;
+    font-size: 11px !important;
+    padding-bottom: 4px !important;
+}
+
+.uplot .u-legend th {
+    color: var(--text-primary) !important;
+}
+
+.uplot .u-over {
+    cursor: crosshair;
+}
+
