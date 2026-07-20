@@ -366,7 +366,7 @@ function recalculateHeaderAssets() {
     const totalAssets = state.accountSummary.cash + marketVal;
 
     document.getElementById("account-mv").innerText = formatCurrency(marketVal);
-    document.getElementById("account-pnl").innerText = formatPNL(totalPnl);
+    document.getElementById("account-pnl").innerHTML = formatPNL(totalPnl);
     document.getElementById("account-assets").innerText = formatCurrency(totalAssets);
 }
 
@@ -564,7 +564,7 @@ function renderAccountSummary() {
     document.getElementById("account-cash").innerText = formatCurrency(state.accountSummary.cash);
     document.getElementById("account-mv").innerText = formatCurrency(state.accountSummary.market_value);
     document.getElementById("account-assets").innerText = formatCurrency(state.accountSummary.total_assets);
-    document.getElementById("account-pnl").innerText = formatPNL(state.accountSummary.total_pnl);
+    document.getElementById("account-pnl").innerHTML = formatPNL(state.accountSummary.total_pnl);
 }
 
 function renderPortfolio() {
