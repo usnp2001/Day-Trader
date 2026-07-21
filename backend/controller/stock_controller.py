@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from service.stock_service import StockService
 from controller.dependencies import get_current_user, get_current_admin
@@ -20,6 +21,8 @@ async def filter_screener(
     exclude_us: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1),
+    sort_by: Optional[str] = Query(None),
+    sort_order: Optional[str] = Query(None),
     current_user: str = Depends(get_current_user)
 ):
     res = StockService.filter_stocks(
@@ -30,7 +33,9 @@ async def filter_screener(
         ma_bullish=ma_bullish,
         exclude_us=exclude_us,
         page=page,
-        page_size=page_size
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
     return ApiResponse.create(result=res)
 
@@ -38,9 +43,16 @@ async def filter_screener(
 async def ace_screener(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1),
+    sort_by: Optional[str] = Query(None),
+    sort_order: Optional[str] = Query(None),
     current_user: str = Depends(get_current_user)
 ):
-    res = StockService.get_ace_stocks(page=page, page_size=page_size)
+    res = StockService.get_ace_stocks(
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
     return ApiResponse.create(result=res)
 
 @router.get("/stocks/search")
@@ -69,6 +81,10 @@ async def admin_sync_official(current_admin: str = Depends(get_current_admin)):
     return ApiResponse.create(message=res["message"])
 
 @router.get("/screener/ai")
-async def ai_screener(current_user: str = Depends(get_current_user)):
-    res = StockService.get_ai_predictions()
+async def ai_screener(
+    sort_by: Optional[str] = Query(None),
+    sort_order: Optional[str] = Query(None),
+    current_user: str = Depends(get_current_user)
+):
+    res = StockService.get_ai_predictions(sort_by=sort_by, sort_order=sort_order)
     return ApiResponse.create(result=res)

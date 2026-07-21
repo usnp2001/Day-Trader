@@ -63,6 +63,9 @@ body {
 .up { color: var(--color-up) !important; }
 .down { color: var(--color-down) !important; }
 .mono { font-family: var(--font-mono); }
+.text-right { text-align: right !important; }
+.text-center { text-align: center !important; }
+.text-left { text-align: left !important; }
 
 /* Header Component */
 header {
@@ -191,6 +194,8 @@ header {
     padding: 8px;
     font-weight: 500;
     border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+    z-index: 10;
 }
 
 .screener-list td {
@@ -824,5 +829,66 @@ header {
 
 .uplot .u-over {
     cursor: crosshair;
+}
+
+/* Table Header Sorting styles */
+.screener-list th.sortable {
+    position: sticky;
+    user-select: none;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.screener-list th.sortable:hover {
+    background-color: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.screener-list th.sortable .sort-icon {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-left: 4px;
+    vertical-align: middle;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.screener-list th.sortable.asc .sort-icon::after {
+    content: "▲";
+    color: var(--color-accent);
+}
+
+.screener-list th.sortable.desc .sort-icon::after {
+    content: "▼";
+    color: var(--color-accent);
+}
+
+/* Page size select hover/focus */
+#select-page-size {
+    transition: border-color 0.2s;
+}
+#select-page-size:hover {
+    border-color: var(--text-muted) !important;
+}
+#select-page-size:focus {
+    border-color: var(--color-accent) !important;
+}
+
+/* Icon button for opening dashboard */
+.btn-tab-icon {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-tab-icon:hover {
+    background-color: var(--bg-hover);
+    transform: scale(1.2);
 }
 

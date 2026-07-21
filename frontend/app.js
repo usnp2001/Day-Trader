@@ -3,8 +3,10 @@
 const state = {
     currentPage: 1,
     totalPages: 1,
-    pageSize: 10,
+    pageSize: 15,
     currentMode: "filter", // "filter" or "ace"
+    sortBy: null,
+    sortOrder: null, // "asc", "desc" or null
     filters: {
         price_min: 0,
         price_max: 999999,
@@ -217,11 +219,42 @@ function bindEvents() {
             fetchStocks();
         }
     });
+
+    // Page Size Select Change Listener
+    const selectPageSize = document.getElementById("select-page-size");
+    if (selectPageSize) {
+        selectPageSize.value = state.pageSize;
+        selectPageSize.addEventListener("change", function() {
+            state.pageSize = parseInt(this.value);
+            state.currentPage = 1;
+            fetchStocks();
+        });
+    }
+
+    // Column Headers Clicking Listeners
+    document.querySelectorAll(".screener-list th.sortable").forEach(th => {
+        th.addEventListener("click", () => {
+            const field = th.getAttribute("data-sort");
+            if (state.sortBy !== field) {
+                state.sortBy = field;
+                state.sortOrder = "desc";
+            } else {
+                if (state.sortOrder === "desc") {
+                    state.sortOrder = "asc";
+                } else {
+                    state.sortBy = null;
+                    state.sortOrder = null;
+                }
+            }
+            updateSortHeadersUI();
+            fetchStocks();
+        });
+    });
 }
 
 async function fetchStocks() {
     const tbody = document.getElementById("screener-results-tbody");
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">查詢中，請稍後...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; color: var(--text-muted); padding: 40px;">查詢中，請稍後...</td></tr>`;
 
     let url;
     if (state.currentMode === "ace") {
@@ -229,9 +262,18 @@ async function fetchStocks() {
             page: state.currentPage,
             page_size: state.pageSize
         });
+        if (state.sortBy) {
+            params.append("sort_by", state.sortBy);
+            params.append("sort_order", state.sortOrder);
+        }
         url = `${API_BASE_URL}/api/screener/ace?${params.toString()}`;
     } else if (state.currentMode === "ai") {
-        url = `${API_BASE_URL}/api/screener/ai`;
+        const params = new URLSearchParams();
+        if (state.sortBy) {
+            params.append("sort_by", state.sortBy);
+            params.append("sort_order", state.sortOrder);
+        }
+        url = `${API_BASE_URL}/api/screener/ai?${params.toString()}`;
     } else {
         // Construct URL query parameters
         const params = new URLSearchParams({
@@ -244,6 +286,10 @@ async function fetchStocks() {
             page: state.currentPage,
             page_size: state.pageSize
         });
+        if (state.sortBy) {
+            params.append("sort_by", state.sortBy);
+            params.append("sort_order", state.sortOrder);
+        }
         url = `${API_BASE_URL}/api/screener/filter?${params.toString()}`;
     }
 
@@ -276,19 +322,21 @@ async function fetchStocks() {
                 state.totalPages = 1;
                 state.currentPage = 1;
                 document.getElementById("results-count").innerText = `共 ${json.result.stocks.length} 筆資料 (AI預測排序)`;
+                updatePaginationInfo(json.result.stocks.length, json.result.stocks.length);
             } else {
                 state.totalPages = json.result.total_pages;
                 state.currentPage = json.result.current_page;
                 document.getElementById("results-count").innerText = `共 ${json.result.total_count} 筆資料`;
+                updatePaginationInfo(json.result.total_count, json.result.stocks.length);
             }
             renderStockList(json.result.stocks);
             updatePaginationUI();
         } else {
-            tbody.innerHTML = `<tr><td colspan="16" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.message || json.detail}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.message || json.detail}</td></tr>`;
         }
     } catch (err) {
         console.error("Fetch request failed:", err);
-        tbody.innerHTML = `<tr><td colspan="15" style="text-align: center; color: var(--color-up); padding: 40px;">選股伺服器連線失敗！</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; color: var(--color-up); padding: 40px;">選股伺服器連線失敗！</td></tr>`;
     }
 }
 
@@ -297,7 +345,7 @@ function renderStockList(stocks) {
     tbody.innerHTML = "";
 
     if (stocks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="15" style="text-align: center; color: var(--text-muted); padding: 40px;">無符合篩選條件的股票</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; color: var(--text-muted); padding: 40px;">無符合篩選條件的股票</td></tr>`;
         return;
     }
 
@@ -346,8 +394,8 @@ function renderStockList(stocks) {
             <td class="mono" style="text-align: right; ${aiProbStyle}">${aiProbVal}</td>
             <td class="mono" style="text-align: right; color: var(--text-muted); font-size: 11px; white-space: nowrap;">${stock.updateDate || "-"}</td>
             <td style="text-align: center;">
-                <button class="btn-tab" style="background-color: var(--color-accent); color: #fff; border:none; padding: 4px 12px; font-size:11px; border-radius:3px; cursor:pointer;" onclick="openDashboard('${stock.symbol}')">
-                    開啟看板
+                <button class="btn-tab-icon" title="開啟個股看板" onclick="openDashboard('${stock.symbol}')">
+                    📊
                 </button>
             </td>
         `;
@@ -377,6 +425,28 @@ function updatePaginationUI() {
     prevBtn.style.cursor = prevBtn.disabled ? "not-allowed" : "pointer";
     nextBtn.style.opacity = nextBtn.disabled ? "0.3" : "1";
     nextBtn.style.cursor = nextBtn.disabled ? "not-allowed" : "pointer";
+}
+
+function updateSortHeadersUI() {
+    document.querySelectorAll(".screener-list th.sortable").forEach(th => {
+        const field = th.getAttribute("data-sort");
+        th.classList.remove("asc", "desc");
+        if (state.sortBy === field) {
+            th.classList.add(state.sortOrder);
+        }
+    });
+}
+
+function updatePaginationInfo(totalCount, currentCount) {
+    const infoDiv = document.getElementById("pagination-info");
+    if (!infoDiv) return;
+    if (totalCount === 0) {
+        infoDiv.innerText = "";
+        return;
+    }
+    const start = (state.currentPage - 1) * state.pageSize + 1;
+    const end = start + currentCount - 1;
+    infoDiv.innerText = `顯示第 ${start} - ${end} 筆，共 ${totalCount} 筆`;
 }
 
 // Global window link function

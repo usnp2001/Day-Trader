@@ -44,7 +44,7 @@
     </header>
 
     <!-- Workspace Layout -->
-    <main style="padding: 16px; display: flex; flex-direction: column; gap: 16px; flex-grow: 1; overflow-y: auto;">
+    <main style="padding: 16px; display: flex; flex-direction: column; gap: 16px; flex-grow: 1; overflow: hidden;">
         
         <!-- Upper Section: Filter Selection Panel -->
         <section class="panel" style="flex-shrink: 0;">
@@ -117,37 +117,49 @@
                 <table class="screener-list" style="font-size: 13px;">
                     <thead>
                         <tr>
-                            <th style="padding: 12px 8px;">商品代碼</th>
-                            <th>商品名稱</th>
-                            <th style="text-align: right;">現價 (元)</th>
-                            <th style="text-align: right;">今日漲跌幅</th>
-                            <th style="text-align: right;">成交量 (股)</th>
-                            <th style="text-align: right;">本益比 (倍)</th>
-                            <th style="text-align: right;">淨值比 (PBR)</th>
-                            <th style="text-align: right;">殖利率 (%)</th>
-                            <th style="text-align: right;">外資買超 (股)</th>
-                            <th style="text-align: right;">投信買超 (股)</th>
-                            <th style="text-align: right;">自營商買超 (股)</th>
-                            <th style="text-align: right;">融資餘額 (股)</th>
-                            <th style="text-align: right;">融券餘額 (股)</th>
-                            <th style="text-align: right;">營收年增率 (%)</th>
-                            <th style="text-align: right; color: #b388ff; font-weight: bold;">AI 上漲機率</th>
-                            <th style="text-align: right;">更新時間</th>
-                            <th style="text-align: center;">操作</th>
+                            <th class="sortable" data-sort="symbol" style="padding: 12px 8px; cursor: pointer;">商品代碼 <span class="sort-icon"></span></th>
+                            <th class="sortable" data-sort="name" style="cursor: pointer;">商品名稱 <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="price" style="cursor: pointer;">現價 (元) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="change_percent" style="cursor: pointer;">今日漲跌幅 <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="volume" style="cursor: pointer;">成交量 (股) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="pe_ratio" style="cursor: pointer;">本益比 (倍) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="pb_ratio" style="cursor: pointer;">淨值比 (PBR) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="dividend_yield" style="cursor: pointer;">殖利率 (%) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="foreign_net_buy" style="cursor: pointer;">外資買超 (股) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="trust_net_buy" style="cursor: pointer;">投信買超 (股) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="dealer_net_buy" style="cursor: pointer;">自營商買超 (股) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="margin_balance" style="cursor: pointer;">融資餘額 (股) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="short_balance" style="cursor: pointer;">融券餘額 (股) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="revenue_yoy" style="cursor: pointer;">營收年增率 (%) <span class="sort-icon"></span></th>
+                            <th class="sortable text-right" data-sort="ai_prob" style="color: #b388ff; font-weight: bold; cursor: pointer;">AI 上漲機率 <span class="sort-icon"></span></th>
+                            <th class="text-right">更新時間</th>
+                            <th class="text-center">操作</th>
                         </tr>
                     </thead>
                     <tbody id="screener-results-tbody">
                         <!-- Populated dynamically by app.js -->
-                        <tr><td colspan="16" style="text-align: center; color: var(--text-muted); padding: 40px;">請點擊上方查詢獲取篩選結果...</td></tr>
+                        <tr><td colspan="17" style="text-align: center; color: var(--text-muted); padding: 40px;">請點擊上方查詢獲取篩選結果...</td></tr>
                     </tbody>
                 </table>
             </div>
 
             <!-- Bottom Pagination Controls -->
-            <div class="panel-header" style="height: 44px; display: flex; justify-content: center; align-items: center; gap: 20px; border-top: 1px solid var(--border-color); flex-shrink: 0;">
-                <button class="btn-tab" id="btn-prev-page" style="padding: 4px 16px;">上一頁</button>
-                <span id="page-indicator" style="font-family: monospace; font-size: 12px; color: var(--text-secondary);">第 1 / 1 頁</span>
-                <button class="btn-tab" id="btn-next-page" style="padding: 4px 16px;">下一頁</button>
+            <div class="panel-header" style="height: 44px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 16px; border-top: 1px solid var(--border-color); flex-shrink: 0;">
+                <div style="display: flex; align-items: center; gap: 8px; justify-self: start;">
+                    <span style="font-size: 11px; color: var(--text-secondary);">每頁顯示:</span>
+                    <select id="select-page-size" style="background: var(--bg-main); border: 1px solid var(--border-color); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; outline: none; transition: border-color 0.2s;">
+                        <option value="15" selected>15 筆</option>
+                        <option value="20">20 筆</option>
+                        <option value="50">50 筆</option>
+                        <option value="100">100 筆</option>
+                    </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 20px; justify-self: center;">
+                    <button class="btn-tab" id="btn-prev-page" style="padding: 4px 16px;">上一頁</button>
+                    <span id="page-indicator" style="font-family: monospace; font-size: 12px; color: var(--text-secondary);">第 1 / 1 頁</span>
+                    <button class="btn-tab" id="btn-next-page" style="padding: 4px 16px;">下一頁</button>
+                </div>
+                <div style="justify-self: end; font-size: 11px; color: var(--text-muted);" id="pagination-info"></div>
             </div>
         </section>
 

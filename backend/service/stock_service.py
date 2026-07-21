@@ -1,7 +1,7 @@
 import math
 import subprocess
 import sys
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dal.stock_metadata_dao import StockMetadataDao
 from dal.ace_watchlist_dao import AceWatchlistDao
 from crawler import StockCrawler
@@ -10,6 +10,25 @@ from common.exceptions import ServiceException
 
 class StockService:
     _crawler_instance = StockCrawler()
+
+    @classmethod
+    def _sort_stocks(cls, stocks: List[Dict[str, Any]], sort_by: Optional[str], sort_order: Optional[str]) -> List[Dict[str, Any]]:
+        if not sort_by:
+            return stocks
+        
+        reverse = (sort_order == "desc")
+        
+        has_val = []
+        no_val = []
+        for s in stocks:
+            val = s.get(sort_by)
+            if val is None:
+                no_val.append(s)
+            else:
+                has_val.append(s)
+        
+        has_val.sort(key=lambda x: x[sort_by], reverse=reverse)
+        return has_val + no_val
 
     @classmethod
     def get_all_raw_stocks(cls) -> List[Dict[str, Any]]:
@@ -27,7 +46,9 @@ class StockService:
         ma_bullish: bool,
         exclude_us: bool,
         page: int,
-        page_size: int
+        page_size: int,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
     ) -> Dict[str, Any]:
         filtered_stocks = StockMetadataDao.filter_stocks(
             price_min=price_min,
@@ -37,6 +58,8 @@ class StockService:
             ma_bullish=ma_bullish,
             exclude_us=exclude_us
         )
+        
+        filtered_stocks = cls._sort_stocks(filtered_stocks, sort_by, sort_order)
         
         total_count = len(filtered_stocks)
         total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
@@ -54,7 +77,13 @@ class StockService:
         }
 
     @classmethod
-    def get_ace_stocks(cls, page: int, page_size: int) -> Dict[str, Any]:
+    def get_ace_stocks(
+        cls,
+        page: int,
+        page_size: int,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None
+    ) -> Dict[str, Any]:
         # Try fetching from the PostgreSQL/SQLite ace_watchlist database
         try:
             ace_symbols = AceWatchlistDao.get_all_symbols()
@@ -67,6 +96,8 @@ class StockService:
             ace_symbols = ["2330.TW", "2317.TW", "2454.TW", "2603.TW", "3231.TW"]
             
         ace_stocks = StockMetadataDao.get_stocks_by_symbols(ace_symbols)
+        
+        ace_stocks = cls._sort_stocks(ace_stocks, sort_by, sort_order)
         
         total_count = len(ace_stocks)
         total_pages = math.ceil(total_count / page_size) if total_count > 0 else 1
@@ -134,7 +165,7 @@ class StockService:
             raise ServiceException(f"Failed to start sync: {str(e)}", status_code=500)
 
     @classmethod
-    def get_ai_predictions(cls) -> Dict[str, Any]:
+    def get_ai_predictions(cls, sort_by: Optional[str] = None, sort_order: Optional[str] = None) -> Dict[str, Any]:
         import os
         import pickle
         import datetime
@@ -293,7 +324,10 @@ class StockService:
                 "ai_prob": round(prob * 100, 2)
             })
             
-        predictions = sorted(predictions, key=lambda x: x["ai_prob"], reverse=True)
+        if sort_by:
+            predictions = cls._sort_stocks(predictions, sort_by, sort_order)
+        else:
+            predictions = sorted(predictions, key=lambda x: x["ai_prob"], reverse=True)
         return {"status": "success", "stocks": predictions}
 
 
