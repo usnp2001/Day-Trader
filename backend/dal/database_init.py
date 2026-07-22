@@ -3,13 +3,14 @@ import hashlib
 import uuid
 from common.logger import logger
 from common.base_dao import BaseDAO, OperationalError, DatabaseError
+from common.config import DB_TYPE
 
 def column_exists(cursor, table_name: str, column_name: str) -> bool:
-    db_type = os.getenv("DB_TYPE", "sqlite").lower()
-    if db_type == "postgres":
+    if DB_TYPE == "postgres":
         cursor.execute("""
-            SELECT 1 FROM information_schema.columns 
-            WHERE table_name = ? AND column_name = ?
+            SELECT 1 FROM pg_attribute a
+            JOIN pg_class c ON a.attrelid = c.oid
+            WHERE c.relname = ? AND a.attname = ? AND NOT a.attisdropped
         """, (table_name.lower(), column_name.lower()))
         return cursor.fetchone() is not None
     else:

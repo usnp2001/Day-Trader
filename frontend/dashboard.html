@@ -81,7 +81,12 @@
         <!-- 1. Left/Center Area: Charts -->
         <div class="panel chart-container">
             <div class="panel-header">
-                <span id="active-stock-title">載入中...</span>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <span id="active-stock-title">載入中...</span>
+                    <div id="active-stock-stats" style="display: flex; align-items: center; gap: 8px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); background: rgba(255,255,255,0.02); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+                        <span style="color: var(--text-muted);">讀取中...</span>
+                    </div>
+                </div>
                 <div class="chart-controls" id="timeframe-controls">
                     <button class="btn-tab" data-val="1m">1分K</button>
                     <button class="btn-tab" data-val="5m">5分K</button>

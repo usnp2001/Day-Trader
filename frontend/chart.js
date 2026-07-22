@@ -157,6 +157,26 @@ class TradingChartManager {
         this.rawKlineData = klineData;
         if (!klineData || klineData.length === 0) return;
 
+        // Dynamically adjust price format options based on active stock's price range
+        const basePrice = klineData[0].close;
+        const tickSize = getTickSizeForPrice(basePrice);
+        
+        this.candlestickSeries.applyOptions({
+            priceFormat: {
+                type: 'price',
+                precision: 2,
+                minMove: tickSize
+            }
+        });
+
+        this.avgPriceSeries.applyOptions({
+            priceFormat: {
+                type: 'price',
+                precision: 2,
+                minMove: tickSize
+            }
+        });
+
         // Set candlesticks
         this.candlestickSeries.setData(klineData);
 
@@ -408,17 +428,46 @@ class TradingChartManager {
     }
 }
 
+function getTickSizeForPrice(price) {
+    if (price < 10) return 0.01;
+    if (price < 50) return 0.05;
+    if (price < 100) return 0.1;
+    if (price < 500) return 0.5;
+    if (price < 1000) return 1.0;
+    return 5.0;
+}
+
 // Tick-size rounding helper
 function roundToTick(price) {
-    let tickSize = 0.01;
-    if (price < 10) tickSize = 0.01;
-    else if (price < 50) tickSize = 0.05;
-    else if (price < 100) tickSize = 0.1;
-    else if (price < 500) tickSize = 0.5;
-    else if (price < 1000) tickSize = 1.0;
-    else tickSize = 5.0;
-
+    const tickSize = getTickSizeForPrice(price);
     return Math.round(price / tickSize) * tickSize;
+}
+
+function getUPlotSplits(scaleMin, scaleMax, tickSize) {
+    const range = scaleMax - scaleMin;
+    if (range <= 0) return [scaleMin];
+    
+    let step = tickSize;
+    const targetTicks = 6;
+    let rawStep = range / targetTicks;
+    
+    if (rawStep < tickSize) {
+        step = tickSize;
+    } else {
+        let multiplier = Math.ceil(rawStep / tickSize);
+        step = multiplier * tickSize;
+    }
+    
+    const splits = [];
+    let firstTick = Math.ceil(scaleMin / step) * step;
+    for (let val = firstTick; val <= scaleMax; val += step) {
+        splits.push(parseFloat(val.toFixed(4)));
+    }
+    
+    if (splits.length < 2) {
+        return [scaleMin, scaleMax];
+    }
+    return splits;
 }
 
 class UPlotChartManager {
@@ -480,6 +529,13 @@ class UPlotChartManager {
         const width = this.container.clientWidth || 800;
         const height = this.container.clientHeight || 350;
 
+        let basePrice = 100.0;
+        if (initialTicks && initialTicks.length > 0) {
+            basePrice = initialTicks[0].price || basePrice;
+        }
+        const tickSize = getTickSizeForPrice(basePrice);
+        this.tickSize = tickSize;
+
         const opts = {
             width: width,
             height: height,
@@ -526,6 +582,9 @@ class UPlotChartManager {
                     grid: {
                         stroke: "#2a2e39",
                         width: 1,
+                    },
+                    splits: (self, scaleMin, scaleMax) => {
+                        return getUPlotSplits(scaleMin, scaleMax, this.tickSize);
                     },
                     values: (self, ticks) => ticks.map(v => v.toFixed(2))
                 }

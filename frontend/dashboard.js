@@ -16,7 +16,8 @@ const state = {
     },
     ws: null,
     chartManager: null,
-    uplotManager: null
+    uplotManager: null,
+    dailyStats: null
 };
 
 const API_BASE_URL = `${window.location.protocol}//${window.location.host}`;
@@ -149,6 +150,7 @@ async function initApp() {
     }
     
     updateActiveStockUI();
+    await fetchActiveStockDailyStats();
     await fetchKlineHistory();
     connectWebSocket();
     initSearchAutocomplete();
@@ -335,6 +337,20 @@ function handleLiveMarketPacket(data) {
         state.chartManager.updateTick(data.tick);
     }
 
+    if (state.dailyStats && data.symbol === state.selectedSymbol) {
+        state.dailyStats.close = data.price;
+        if (data.price > state.dailyStats.high) {
+            state.dailyStats.high = data.price;
+        }
+        if (data.price < state.dailyStats.low) {
+            state.dailyStats.low = data.price;
+        }
+        if (data.tick && data.tick.volume) {
+            state.dailyStats.volume += data.tick.volume;
+        }
+        renderActiveStockStatsUI();
+    }
+
     const stock = state.screenerStocks.find(s => s.symbol === data.symbol);
     const prevClose = stock ? (data.price - stock.change) : data.price;
     const diff = data.price - prevClose;
@@ -444,6 +460,7 @@ function switchStock(symbol, name) {
     window.history.pushState({ path: newUrl }, '', newUrl);
 
     updateActiveStockUI();
+    fetchActiveStockDailyStats();
     fetchKlineHistory();
     connectWebSocket();
 
@@ -546,6 +563,74 @@ function showBottomTab(tabName) {
 
 function updateActiveStockUI() {
     document.getElementById("active-stock-title").innerText = `${state.selectedName} (${state.selectedSymbol})`;
+}
+
+async function fetchActiveStockDailyStats() {
+    const statsDiv = document.getElementById("active-stock-stats");
+    if (statsDiv) {
+        statsDiv.innerHTML = `<span style="color: var(--text-muted);">讀取中...</span>`;
+    }
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/kline/${state.selectedSymbol}?interval=1d`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+            handleLogout();
+            return;
+        }
+        const json = await res.json();
+        if (json.status === 200) {
+            const data = json.result.data;
+            if (data && data.length > 0) {
+                const today = data[data.length - 1];
+                const yesterday = data.length >= 2 ? data[data.length - 2] : null;
+                
+                state.dailyStats = {
+                    open: today.open,
+                    high: today.high,
+                    low: today.low,
+                    close: today.close,
+                    volume: today.volume,
+                    yesterdayVolume: yesterday ? yesterday.volume : null
+                };
+                
+                renderActiveStockStatsUI();
+            } else {
+                if (statsDiv) statsDiv.innerHTML = `<span style="color: var(--text-muted);">-</span>`;
+            }
+        } else {
+            if (statsDiv) statsDiv.innerHTML = `<span style="color: var(--text-muted);">-</span>`;
+        }
+    } catch (e) {
+        console.error("Error fetching active stock stats:", e);
+        if (statsDiv) statsDiv.innerHTML = `<span style="color: var(--text-muted);">-</span>`;
+    }
+}
+
+function renderActiveStockStatsUI() {
+    const statsDiv = document.getElementById("active-stock-stats");
+    if (!statsDiv || !state.dailyStats) return;
+    
+    const stats = state.dailyStats;
+    const highColorClass = stats.high > stats.open ? "up" : (stats.high < stats.open ? "down" : "");
+    const lowColorClass = stats.low > stats.open ? "up" : (stats.low < stats.open ? "down" : "");
+    const closeColorClass = stats.close > stats.open ? "up" : (stats.close < stats.open ? "down" : "");
+    
+    statsDiv.innerHTML = `
+        <span>開: <span class="stats-val" style="color: #fff; font-weight: 600;">${stats.open.toFixed(2)}</span></span>
+        <span style="color: var(--border-color);">|</span>
+        <span>高: <span class="stats-val ${highColorClass}" style="font-weight: 600;">${stats.high.toFixed(2)}</span></span>
+        <span style="color: var(--border-color);">|</span>
+        <span>低: <span class="stats-val ${lowColorClass}" style="font-weight: 600;">${stats.low.toFixed(2)}</span></span>
+        <span style="color: var(--border-color);">|</span>
+        <span>收: <span class="stats-val ${closeColorClass}" style="font-weight: 600;">${stats.close.toFixed(2)}</span></span>
+        <span style="color: var(--border-color);">|</span>
+        <span>量: <span class="stats-val" style="color: #ffaa00; font-weight: 600;">${stats.volume.toLocaleString()} 股</span></span>
+        ${stats.yesterdayVolume !== null ? `
+            <span style="color: var(--border-color);">|</span>
+            <span>昨量: <span class="stats-val" style="color: var(--text-muted); font-weight: 600;">${stats.yesterdayVolume.toLocaleString()} 股</span></span>
+        ` : ""}
+    `;
 }
 
 function updateChartOverlay(price, changePercent) {
