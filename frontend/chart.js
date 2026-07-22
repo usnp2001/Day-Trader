@@ -33,7 +33,7 @@ class TradingChartManager {
                 horzLines: { color: '#2a2e39', style: 1 },
             },
             crosshair: {
-                mode: 0, // Normal crosshair
+                mode: 1, // Magnet crosshair (focuses on closest price bar)
                 vertLine: {
                     color: '#708090',
                     width: 1,
@@ -599,6 +599,13 @@ class UPlotChartManager {
                 },
                 drag: {
                     setScale: false
+                },
+                top: (self, top) => {
+                    if (top === null || top < 0) return null;
+                    const price = self.posToVal(top, "y");
+                    if (price === undefined || price === null) return top;
+                    const roundedPrice = Math.round(price / tickSize) * tickSize;
+                    return self.valToPos(roundedPrice, "y");
                 }
             }
         };
