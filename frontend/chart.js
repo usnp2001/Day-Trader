@@ -78,7 +78,8 @@ class TradingChartManager {
             color: '#00b0ff',
             lineWidth: 1.5,
             title: '均價線',
-            priceScaleId: 'right'
+            priceScaleId: 'right',
+            crosshairMarkerVisible: false, // Prevents crosshair snapping to average price line
         });
 
         // Add Volume series overlaid on bottom
@@ -86,6 +87,7 @@ class TradingChartManager {
             color: '#26a69a',
             priceFormat: { type: 'volume' },
             priceScaleId: 'volume', // Render on a hidden scale
+            crosshairMarkerVisible: false, // Prevents crosshair snapping to volume histogram bars
         });
         
         this.mainChart.priceScale('volume').applyOptions({
@@ -130,10 +132,16 @@ class TradingChartManager {
         this.mainChart.subscribeClick((param) => {
             if (!param.point || !param.time || !this.clickCallback) return;
             
-            // Convert vertical coordinate to price
-            const price = this.candlestickSeries.coordinateToPrice(param.point.y);
-            if (price) {
-                this.clickCallback(roundToTick(price));
+            // Try to get the close price of the clicked candlestick first
+            const candleData = param.seriesData.get(this.candlestickSeries);
+            if (candleData && candleData.close !== undefined) {
+                this.clickCallback(candleData.close);
+            } else {
+                // Fallback to vertical coordinate price
+                const price = this.candlestickSeries.coordinateToPrice(param.point.y);
+                if (price) {
+                    this.clickCallback(roundToTick(price));
+                }
             }
         });
 
@@ -444,18 +452,23 @@ function roundToTick(price) {
 }
 
 function getUPlotSplits(scaleMin, scaleMax, tickSize) {
+    if (scaleMin === undefined || scaleMin === null || isNaN(scaleMin) ||
+        scaleMax === undefined || scaleMax === null || isNaN(scaleMax)) {
+        return [];
+    }
+
     const range = scaleMax - scaleMin;
     if (range <= 0) return [scaleMin];
     
-    let step = tickSize;
+    let step = tickSize || 0.01;
     const targetTicks = 6;
     let rawStep = range / targetTicks;
     
-    if (rawStep < tickSize) {
-        step = tickSize;
+    if (rawStep < step) {
+        step = step;
     } else {
-        let multiplier = Math.ceil(rawStep / tickSize);
-        step = multiplier * tickSize;
+        let multiplier = Math.ceil(rawStep / step);
+        step = multiplier * step;
     }
     
     const splits = [];
@@ -526,7 +539,8 @@ class UPlotChartManager {
             this.data = [[nowSec], [0.0]];
         }
 
-        const width = this.container.clientWidth || 800;
+        const parentWidth = this.container.parentElement ? this.container.parentElement.clientWidth : 0;
+        const width = parentWidth || this.container.clientWidth || 800;
         const height = this.container.clientHeight || 350;
 
         let basePrice = 100.0;
@@ -536,12 +550,15 @@ class UPlotChartManager {
         const tickSize = getTickSizeForPrice(basePrice);
         this.tickSize = tickSize;
 
+        console.log(`[uPlot Debug] initChart: ticksCount=${initialTicks ? initialTicks.length : 0}, parentWidth=${parentWidth}, containerWidth=${this.container.clientWidth}, finalWidth=${width}, height=${height}, tickSize=${tickSize}`);
+
         const opts = {
             width: width,
             height: height,
             title: "",
             id: "uplot-canvas-core",
             class: "uplot-chart-custom",
+            padding: [12, 60, 12, 12],
             scales: {
                 x: {
                     time: true,
@@ -561,6 +578,7 @@ class UPlotChartManager {
                 },
                 {
                     // Y-axis Price formatting (light-blue stroke area chart)
+                    scale: 'y',
                     stroke: "#00b0ff",
                     width: 2,
                     fill: "rgba(0, 176, 255, 0.05)",
@@ -578,15 +596,20 @@ class UPlotChartManager {
                     size: 40,
                 },
                 {
+                    show: true,
+                    side: 1,
+                    scale: 'y',
                     stroke: "#b2b5be",
                     grid: {
+                        show: true,
                         stroke: "#2a2e39",
                         width: 1,
                     },
-                    splits: (self, scaleMin, scaleMax) => {
-                        return getUPlotSplits(scaleMin, scaleMax, this.tickSize);
+                    size: 60,
+                    splits: (self, axisIdx, scaleMin, scaleMax) => {
+                        return getUPlotSplits(scaleMin, scaleMax, tickSize);
                     },
-                    values: (self, ticks) => ticks.map(v => v.toFixed(2))
+                    values: (self, ticks) => ticks.map(v => (v !== undefined && v !== null && !isNaN(v)) ? Number(v).toFixed(2) : "")
                 }
             ],
             cursor: {
@@ -600,12 +623,16 @@ class UPlotChartManager {
                 drag: {
                     setScale: false
                 },
-                top: (self, top) => {
-                    if (top === null || top < 0) return null;
-                    const price = self.posToVal(top, "y");
-                    if (price === undefined || price === null) return top;
-                    const roundedPrice = Math.round(price / tickSize) * tickSize;
-                    return self.valToPos(roundedPrice, "y");
+                move: (self, mouseLeft, mouseTop) => {
+                    const idx = self.posToIdx(mouseLeft);
+                    if (idx !== undefined && idx !== null && idx >= 0) {
+                        const price = self.data[1][idx];
+                        if (price !== undefined && price !== null) {
+                            const snappedTop = self.valToPos(price, "y");
+                            return [mouseLeft, snappedTop];
+                        }
+                    }
+                    return [mouseLeft, mouseTop];
                 }
             }
         };
@@ -615,11 +642,26 @@ class UPlotChartManager {
         // Setup mouse click coordinate handler on uPlot interaction area
         const over = this.uplot.root.querySelector(".u-over");
         if (over) {
-            over.addEventListener("click", () => {
-                if (this.uplot && this.uplot.cursor.left !== null && this.uplot.cursor.top !== null && this.clickCallback) {
-                    const price = this.uplot.posToVal(this.uplot.cursor.top, "y");
-                    if (price && price > 0) {
-                        this.clickCallback(roundToTick(price));
+            let dragStart = null;
+            over.addEventListener("mousedown", (e) => {
+                dragStart = { x: e.clientX, y: e.clientY };
+            });
+
+            over.addEventListener("mouseup", (e) => {
+                if (!dragStart) return;
+                const dist = Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y);
+                dragStart = null;
+                if (dist > 5) return; // Ignore drag operations
+
+                if (this.uplot && this.clickCallback) {
+                    const rect = over.getBoundingClientRect();
+                    const left = e.clientX - rect.left;
+                    const idx = this.uplot.posToIdx(left);
+                    if (idx !== undefined && idx !== null && idx >= 0 && idx < this.data[1].length) {
+                        const price = this.data[1][idx];
+                        if (price && price > 0) {
+                            this.clickCallback(price);
+                        }
                     }
                 }
             });

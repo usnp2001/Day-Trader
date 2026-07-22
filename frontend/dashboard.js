@@ -504,25 +504,67 @@ function bindUIEvents() {
 
     // Modal forms toggles
     document.getElementById("modal-action-buy").addEventListener("click", () => {
+        const chkClosePos = document.getElementById("modal-chk-close-position");
+        if (chkClosePos) chkClosePos.checked = false;
         setModalAction("BUY");
     });
     document.getElementById("modal-action-sell").addEventListener("click", () => {
+        const chkClosePos = document.getElementById("modal-chk-close-position");
+        if (chkClosePos) chkClosePos.checked = false;
         setModalAction("SELL");
     });
 
     document.getElementById("btn-qty-minus").addEventListener("click", () => {
+        const chkClosePos = document.getElementById("modal-chk-close-position");
+        if (chkClosePos) chkClosePos.checked = false;
         const input = document.getElementById("input-qty");
-        input.value = Math.max(1, parseInt(input.value) - 1);
+        input.value = Math.max(1000, parseInt(input.value) - 1000);
         updateModalEstimatedCost();
     });
     document.getElementById("btn-qty-plus").addEventListener("click", () => {
+        const chkClosePos = document.getElementById("modal-chk-close-position");
+        if (chkClosePos) chkClosePos.checked = false;
         const input = document.getElementById("input-qty");
-        input.value = parseInt(input.value) + 1;
+        input.value = parseInt(input.value) + 1000;
         updateModalEstimatedCost();
     });
 
-    document.getElementById("input-qty").addEventListener("input", updateModalEstimatedCost);
+    document.getElementById("input-qty").addEventListener("input", () => {
+        const chkClosePos = document.getElementById("modal-chk-close-position");
+        if (chkClosePos) chkClosePos.checked = false;
+        updateModalEstimatedCost();
+    });
     document.getElementById("input-price").addEventListener("input", updateModalEstimatedCost);
+
+    // Bind Close Position checkbox
+    const chkClosePos = document.getElementById("modal-chk-close-position");
+    if (chkClosePos) {
+        chkClosePos.addEventListener("change", (e) => {
+            if (e.target.checked) {
+                const pos = state.positions.find(p => p.symbol === state.selectedSymbol);
+                if (!pos || Math.abs(pos.qty) < 1000) {
+                    alert("目前無此商品的可平倉部位 (或部位不足 1,000 股)！");
+                    e.target.checked = false;
+                    return;
+                }
+                
+                const absQty = Math.abs(pos.qty);
+                const flatQty = Math.floor(absQty / 1000) * 1000; // Round down to nearest 1000 (excluding odd lots)
+                
+                document.getElementById("input-qty").value = flatQty;
+                
+                // Auto switch action
+                if (pos.qty > 0) {
+                    setModalAction("SELL");
+                } else {
+                    setModalAction("BUY");
+                }
+            } else {
+                document.getElementById("input-qty").value = 1000;
+            }
+            updateModalEstimatedCost();
+        });
+    }
 
     // Limit/Market order toggles
     document.querySelectorAll("input[name='order_type']").forEach(radio => {
@@ -797,6 +839,12 @@ function appendTickLog(tick) {
 
 function openTradingModal(action, prefilledPrice) {
     document.getElementById("modal-title").innerText = `${state.selectedName} (${state.selectedSymbol}) - 送出委託`;
+    
+    // Reset Close Position checkbox
+    const chkClosePos = document.getElementById("modal-chk-close-position");
+    if (chkClosePos) {
+        chkClosePos.checked = false;
+    }
     
     state.selectedPrice = prefilledPrice;
     document.getElementById("input-price").value = prefilledPrice;

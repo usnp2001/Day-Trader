@@ -13,6 +13,7 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 from dal.stock_metadata_dao import StockMetadataDao
+from dal.database_init import column_exists
 from common.logger import logger
 from common.config import DB_TYPE, DB_FILE
 from common.base_dao import BaseDAO, OperationalError, DatabaseError
@@ -44,15 +45,17 @@ def migrate_database_columns():
         ("revenue_growth", "REAL")
     ]
     for col_name, col_type in new_columns:
-        try:
-            cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col_name} {col_type}")
-            conn.commit()
-            logger.info(f"[SyncJobYF] Dynamic migration added column: {col_name}")
-        except DatabaseError:
+        if not column_exists(cursor, "stock_metadata", col_name):
             try:
-                conn.rollback()
-            except Exception:
-                pass
+                cursor.execute(f"ALTER TABLE stock_metadata ADD COLUMN {col_name} {col_type}")
+                conn.commit()
+                logger.info(f"[SyncJobYF] Dynamic migration added column: {col_name}")
+            except DatabaseError as e:
+                logger.warning(f"[SyncJobYF] Migration failed for column {col_name}: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
     conn.close()
 
 def sync_global_yfinance():

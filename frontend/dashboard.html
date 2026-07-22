@@ -263,13 +263,19 @@
                 </div>
 
                 <!-- Quantity input -->
-                <div class="form-group">
+                <div class="form-group" style="margin-bottom: 8px;">
                     <label>委託張/股數 (台灣單位:股)</label>
                     <div class="input-with-button">
                         <button class="quick-btn" id="btn-qty-minus">-</button>
                         <input type="number" id="input-qty" value="1000" min="1" step="1000">
                         <button class="quick-btn" id="btn-qty-plus">+</button>
                     </div>
+                </div>
+
+                <!-- Close Position Checkbox -->
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: -4px; margin-bottom: 16px;">
+                    <input type="checkbox" id="modal-chk-close-position" style="cursor: pointer; width: 15px; height: 15px; margin: 0;">
+                    <label for="modal-chk-close-position" style="cursor: pointer; margin: 0; user-select: none; font-size: 12px; font-weight: 600; color: var(--color-accent);">平倉 (自動帶入持倉，扣除零股)</label>
                 </div>
 
                 <!-- Estimated cost total -->
