@@ -332,20 +332,23 @@ async function fetchStocks() {
             renderStockList(json.result.stocks);
             updatePaginationUI();
         } else {
-            tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.message || json.detail}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="18" style="text-align: center; color: var(--color-up); padding: 40px;">查詢錯誤: ${json.message || json.detail}</td></tr>`;
         }
     } catch (err) {
         console.error("Fetch request failed:", err);
-        tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; color: var(--color-up); padding: 40px;">選股伺服器連線失敗！</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="18" style="text-align: center; color: var(--color-up); padding: 40px;">選股伺服器連線失敗！</td></tr>`;
     }
 }
 
 function renderStockList(stocks) {
     const tbody = document.getElementById("screener-results-tbody");
     tbody.innerHTML = "";
+    
+    const chkAll = document.getElementById('check-all-screener');
+    if (chkAll) chkAll.checked = false;
 
     if (stocks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="17" style="text-align: center; color: var(--text-muted); padding: 40px;">無符合篩選條件的股票</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="18" style="text-align: center; color: var(--text-muted); padding: 40px;">無符合篩選條件的股票</td></tr>`;
         return;
     }
 
@@ -369,6 +372,9 @@ function renderStockList(stocks) {
         const aiProbStyle = stock.ai_prob !== undefined ? "color: #b388ff; font-weight: bold;" : "color: var(--text-secondary);";
 
         tr.innerHTML = `
+            <td style="text-align: center; padding: 12px 10px;" onclick="event.stopPropagation()">
+                <input type="checkbox" class="screener-row-checkbox" value="${stock.symbol}" onclick="onScreenerRowCheckboxClick(event)">
+            </td>
             <td style="padding: 12px 8px; font-weight:600; font-family: monospace;">${stock.symbol}</td>
             <td style="font-weight:600; color: #fff;">${stock.name}</td>
             <td class="mono ${colorClass}" style="text-align: right; font-weight:500;">
@@ -751,6 +757,74 @@ window.handleSyncOfficial = async function() {
     } finally {
         btn.disabled = false;
         btn.textContent = "同步官方數據";
+    }
+};
+
+// ==========================================
+// BULK WATCHLIST SELECTION LOGIC
+// ==========================================
+
+window.toggleScreenerCheckAll = function(master) {
+    const checkboxes = document.querySelectorAll('.screener-row-checkbox');
+    checkboxes.forEach(cb => cb.checked = master.checked);
+};
+
+window.onScreenerRowCheckboxClick = function(event) {
+    event.stopPropagation();
+    const total = document.querySelectorAll('.screener-row-checkbox').length;
+    const checked = document.querySelectorAll('.screener-row-checkbox:checked').length;
+    const chkAll = document.getElementById('check-all-screener');
+    if (chkAll) {
+        chkAll.checked = (total === checked && total > 0);
+    }
+};
+
+window.handleAddSelectedToWatchlist = async function() {
+    const checkedCbs = document.querySelectorAll('.screener-row-checkbox:checked');
+    if (checkedCbs.length === 0) {
+        alert("請先勾選要加入自選清單的股票！");
+        return;
+    }
+
+    const symbols = Array.from(checkedCbs).map(cb => cb.value);
+    const btn = document.getElementById("btn-add-to-watchlist");
+    if (!btn) return;
+    
+    btn.disabled = true;
+    const origText = btn.innerHTML;
+    btn.textContent = "⌛ 新增中...";
+
+    try {
+        let addedCount = 0;
+        let failedCount = 0;
+        
+        for (const symbol of symbols) {
+            const response = await fetch('/api/watchlist', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ symbol: symbol })
+            });
+            if (response.ok) {
+                addedCount++;
+            } else {
+                failedCount++;
+            }
+        }
+        
+        alert(`成功將 ${addedCount} 檔股票加入自選清單！` + (failedCount > 0 ? ` (有 ${failedCount} 檔加入失敗)` : ""));
+        
+        // Clear all checkboxes
+        checkedCbs.forEach(cb => cb.checked = false);
+        const chkAll = document.getElementById('check-all-screener');
+        if (chkAll) chkAll.checked = false;
+    } catch (err) {
+        alert("加入自選清單時發生網路錯誤: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origText;
     }
 };
 
