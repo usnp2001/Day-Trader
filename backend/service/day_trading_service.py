@@ -1,7 +1,7 @@
 import uuid
 import random
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import yfinance as yf
 from dal.stock_metadata_dao import StockMetadataDao
 from dal.day_trading_dao import DayTradingDao
@@ -100,6 +100,98 @@ class DayTradingService:
         }
 
     @classmethod
+    def import_watchlist_ticks(cls, username: str) -> Dict[str, Any]:
+        """
+        Gets the user's custom watchlist symbols.
+        Downloads their 1-minute daily tick data via yfinance, or generates
+        high-fidelity mock ticks if yfinance is empty or rate-limited.
+        """
+        logger.info(f"[Simulation] Fetching watchlist stocks for tick import for user: {username}...")
+        
+        from dal.user_watchlist_dao import UserWatchlistDao
+        watchlist = UserWatchlistDao.get_watchlist(username)
+        if not watchlist:
+            return {"status": "error", "message": "自選清單中無股票。請先將股票加入自選清單！"}
+            
+        # Get metadata for these symbols
+        symbols = [w["symbol"] for w in watchlist]
+        conn = StockMetadataDao.get_connection()
+        placeholders = ",".join(["?"] * len(symbols))
+        rows = conn.execute(f"""
+            SELECT symbol, name, price, volume FROM stock_metadata
+            WHERE symbol IN ({placeholders})
+        """, symbols).fetchall()
+        conn.close()
+        
+        if not rows:
+            return {"status": "error", "message": "自選股在資料庫中找不到對應元數據，請先執行同步！"}
+            
+        DayTradingDao.clear_ticks()
+        imported_count = 0
+        mocked_count = 0
+        all_ticks = []
+
+        for r in rows:
+            symbol = r["symbol"]
+            name = r["name"]
+            base_price = r["price"]
+            volume = r["volume"] or 100000
+            
+            logger.info(f"[Simulation] Loading ticks for {symbol} ({name})...")
+            ticks = []
+            
+            # Try fetching real yfinance 1m data
+            try:
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(period="1d", interval="1m")
+                if not df.empty and len(df) >= 30:
+                    prev_p = None
+                    prev_t = "OUTER"
+                    for idx, row in df.iterrows():
+                        time_str = idx.strftime("%H:%M:%S")
+                        close_p = round(float(row["Close"]), 2)
+                        
+                        if prev_p is None:
+                            curr_type = "OUTER"
+                        elif close_p > prev_p:
+                            curr_type = "OUTER"
+                            prev_t = "OUTER"
+                        elif close_p < prev_p:
+                            curr_type = "INNER"
+                            prev_t = "INNER"
+                        else:
+                            curr_type = prev_t
+                            
+                        ticks.append({
+                            "symbol": symbol,
+                            "timestamp": time_str,
+                            "price": close_p,
+                            "volume": int(row["Volume"]),
+                            "tick_type": curr_type
+                        })
+                        prev_p = close_p
+                    imported_count += 1
+                    logger.info(f"[Simulation] Successfully imported {len(ticks)} real ticks for {symbol}.")
+            except Exception as e:
+                logger.warning(f"[Simulation] Failed to get yfinance data for {symbol}: {e}. Falling back to mock data.")
+
+            # Fallback to high-fidelity mock ticks
+            if not ticks:
+                ticks = cls._generate_mock_ticks(symbol, base_price, volume)
+                mocked_count += 1
+                logger.info(f"[Simulation] Generated {len(ticks)} simulated ticks for {symbol}.")
+                
+            all_ticks.extend(ticks)
+
+        # Bulk insert
+        DayTradingDao.insert_ticks(all_ticks)
+        logger.info(f"[Simulation] Watchlist tick import completed. Real: {imported_count}, Mocked: {mocked_count}, Total Ticks: {len(all_ticks)}.")
+        return {
+            "status": "success",
+            "message": f"自選股 Ticks 匯入成功！共 {len(rows)} 檔 (實體: {imported_count}, 模擬: {mocked_count})。"
+        }
+
+    @classmethod
     def _generate_mock_ticks(cls, symbol: str, base_price: float, volume: int) -> List[Dict[str, Any]]:
         """Generates realistic 1-minute interval ticks from 09:00:00 to 13:30:00 (271 ticks)."""
         ticks = []
@@ -153,13 +245,13 @@ class DayTradingService:
         return ticks
 
     @classmethod
-    def run_simulation(cls, username: str, allocated_limit: float) -> Dict[str, Any]:
+    def run_simulation(cls, username: str, allocated_limit: float, symbols_filter: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Runs the Day Trading Simulation for the given user.
         Uses Peak/Trough algorithm, stop-loss (-1%) & take-profit (+4%) rules,
         and Taiwan-specific transaction costs.
         """
-        logger.info(f"[Simulation] Running simulation for user '{username}' with budget NT$ {allocated_limit} per stock...")
+        logger.info(f"[Simulation] Running simulation for user '{username}' with budget NT$ {allocated_limit} per stock (Filter: {symbols_filter})...")
         
         # 1. Clear previous simulation data
         DayTradingDao.clear_user_simulation_data(username)
@@ -170,7 +262,10 @@ class DayTradingService:
         conn.close()
         symbols = [r["symbol"] for r in symbols_rows]
         
-        if not symbols:
+        if symbols_filter is not None:
+            symbols = [s for s in symbols if s in symbols_filter]
+            
+        if not symbols and symbols_filter is None:
             # If no ticks imported, auto-import first!
             cls.import_top_50_ticks()
             conn = DayTradingDao.get_connection()
@@ -179,7 +274,7 @@ class DayTradingService:
             symbols = [r["symbol"] for r in symbols_rows]
             
         if not symbols:
-            return {"status": "error", "message": "No ticks data available to run simulation."}
+            return {"status": "error", "message": "無可用 Tick 資料以執行模擬。請先匯入 Tick 資料！"}
             
         # Get stock metadata for names
         db_stocks = StockMetadataDao.get_stocks_by_symbols(symbols)
@@ -612,14 +707,14 @@ class DayTradingService:
         }
 
     @classmethod
-    def run_simulation_open_base(cls, username: str, allocated_limit: float) -> Dict[str, Any]:
+    def run_simulation_open_base(cls, username: str, allocated_limit: float, symbols_filter: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Runs the Second Day Trading Simulation strategy for the given user.
         Uses Open Price relative to Flat Price (Yesterday's Close) to build positions:
         - If Open Price > Flat Price -> BUY Long Open at opening price
         - If Open Price <= Flat Price -> SELL Short Open at opening price
         """
-        logger.info(f"[Simulation] Running Open Price Base simulation for user '{username}' with budget NT$ {allocated_limit} per stock...")
+        logger.info(f"[Simulation] Running Open Price Base simulation for user '{username}' with budget NT$ {allocated_limit} per stock (Filter: {symbols_filter})...")
         
         # 1. Clear previous simulation data
         DayTradingDao.clear_user_simulation_data(username)
@@ -630,7 +725,10 @@ class DayTradingService:
         conn.close()
         symbols = [r["symbol"] for r in symbols_rows]
         
-        if not symbols:
+        if symbols_filter is not None:
+            symbols = [s for s in symbols if s in symbols_filter]
+            
+        if not symbols and symbols_filter is None:
             # If no ticks imported, auto-import first!
             cls.import_top_50_ticks()
             conn = DayTradingDao.get_connection()
@@ -639,7 +737,7 @@ class DayTradingService:
             symbols = [r["symbol"] for r in symbols_rows]
             
         if not symbols:
-            return {"status": "error", "message": "No ticks data available to run simulation."}
+            return {"status": "error", "message": "無可用 Tick 資料以執行模擬。請先匯入 Tick 資料！"}
             
         # Get stock metadata for names and yesterday's close (flat price = price - change)
         db_stocks = StockMetadataDao.get_stocks_by_symbols(symbols)

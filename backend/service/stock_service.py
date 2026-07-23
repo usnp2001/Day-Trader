@@ -120,6 +120,17 @@ class StockService:
 
     @classmethod
     def get_kline_data(cls, symbol: str, interval: str) -> List[Dict[str, Any]]:
+        if interval == "1m":
+            try:
+                import datetime
+                from dal.day_trading_dao import DayTradingDao
+                today_str = datetime.date.today().strftime("%Y-%m-%d")
+                ticks = DayTradingDao.get_ticks_by_symbol_and_date(symbol, today_str)
+                if ticks:
+                    logger.info(f"[Service] Loaded {len(ticks)} ticks from day_trading_ticks for symbol {symbol} on {today_str}.")
+                    return [{"time": t["timestamp"], "close": t["price"], "volume": t["volume"]} for t in ticks]
+            except Exception as e:
+                logger.error(f"[Service] Error loading ticks from DB: {e}")
         return cls._crawler_instance.get_kline_data(symbol, interval)
 
     @classmethod

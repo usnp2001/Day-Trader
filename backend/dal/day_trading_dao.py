@@ -1,3 +1,4 @@
+import datetime
 from typing import List, Dict, Any
 from common.base_dao import BaseDAO
 
@@ -19,9 +20,16 @@ class DayTradingDao(BaseDAO):
         conn = cls.get_connection()
         cursor = conn.cursor()
         cursor.executemany("""
-            INSERT INTO day_trading_ticks (symbol, timestamp, price, volume, tick_type)
-            VALUES (?, ?, ?, ?, ?)
-        """, [(t["symbol"], t["timestamp"], t["price"], t["volume"], t.get("tick_type", "OUTER")) for t in ticks_list])
+            INSERT INTO day_trading_ticks (symbol, timestamp, price, volume, tick_type, created_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, [(
+            t["symbol"], 
+            t["timestamp"], 
+            t["price"], 
+            t["volume"], 
+            t.get("tick_type", "OUTER"),
+            t.get("created_date", datetime.date.today().strftime("%Y-%m-%d"))
+        ) for t in ticks_list])
         conn.commit()
         conn.close()
 
@@ -30,25 +38,38 @@ class DayTradingDao(BaseDAO):
         """Retrieves all ticks sorted by symbol and timestamp."""
         conn = cls.get_connection()
         rows = conn.execute("""
-            SELECT symbol, timestamp, price, volume, tick_type
+            SELECT symbol, timestamp, price, volume, tick_type, created_date
             FROM day_trading_ticks
             ORDER BY symbol, timestamp ASC
         """).fetchall()
         conn.close()
-        return [{"symbol": r["symbol"], "timestamp": r["timestamp"], "price": r["price"], "volume": r["volume"], "tick_type": r["tick_type"]} for r in rows]
+        return [{"symbol": r["symbol"], "timestamp": r["timestamp"], "price": r["price"], "volume": r["volume"], "tick_type": r["tick_type"], "created_date": r["created_date"]} for r in rows]
 
     @classmethod
     def get_ticks_by_symbol(cls, symbol: str) -> List[Dict[str, Any]]:
         """Retrieves ticks for a specific symbol sorted by timestamp."""
         conn = cls.get_connection()
         rows = conn.execute("""
-            SELECT symbol, timestamp, price, volume, tick_type
+            SELECT symbol, timestamp, price, volume, tick_type, created_date
             FROM day_trading_ticks
             WHERE symbol = ?
             ORDER BY timestamp ASC
         """, (symbol,)).fetchall()
         conn.close()
-        return [{"symbol": r["symbol"], "timestamp": r["timestamp"], "price": r["price"], "volume": r["volume"], "tick_type": r["tick_type"]} for r in rows]
+        return [{"symbol": r["symbol"], "timestamp": r["timestamp"], "price": r["price"], "volume": r["volume"], "tick_type": r["tick_type"], "created_date": r["created_date"]} for r in rows]
+
+    @classmethod
+    def get_ticks_by_symbol_and_date(cls, symbol: str, date_str: str) -> List[Dict[str, Any]]:
+        """Retrieves ticks for a specific symbol and date sorted by timestamp."""
+        conn = cls.get_connection()
+        rows = conn.execute("""
+            SELECT symbol, timestamp, price, volume, tick_type, created_date
+            FROM day_trading_ticks
+            WHERE symbol = ? AND (created_date = ? OR created_date IS NULL)
+            ORDER BY timestamp ASC
+        """, (symbol, date_str)).fetchall()
+        conn.close()
+        return [{"symbol": r["symbol"], "timestamp": r["timestamp"], "price": r["price"], "volume": r["volume"], "tick_type": r["tick_type"], "created_date": r["created_date"]} for r in rows]
 
     @classmethod
     def clear_user_simulation_data(cls, username: str):

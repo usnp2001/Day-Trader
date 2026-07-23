@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自選模擬清單 - Antigravity Trader</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        // Synchronous Security Check before page rendering to prevent UI flash
+        if (!localStorage.getItem('token')) {
+            window.location.href = '/login.html';
+        }
+    </script>
+    <style>
+        body {
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-main);
+        }
+
+        .watchlist-page {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 16px;
+            flex-grow: 1;
+            overflow-y: auto;
+            height: calc(100vh - 50px);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .control-panel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            align-items: end;
+        }
+
+        .search-container {
+            position: relative;
+        }
+
+        .search-suggestions-dropdown {
+            display: none;
+            position: absolute;
+            top: 40px;
+            left: 0;
+            width: 100%;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .suggestion-item:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .metric-card {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--color-accent);
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: var(--color-accent);
+        }
+
+        .metric-card.pnl-card.positive::before {
+            background-color: var(--color-up);
+        }
+
+        .metric-card.pnl-card.negative::before {
+            background-color: var(--color-down);
+        }
+
+        .metric-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+        }
+
+        .metric-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid transparent;
+        }
+
+        .status-badge.success {
+            background-color: rgba(255, 77, 77, 0.1);
+            color: var(--color-up);
+            border-color: rgba(255, 77, 77, 0.2);
+        }
+
+        .status-badge.stop_loss {
+            background-color: rgba(46, 189, 133, 0.1);
+            color: var(--color-down);
+            border-color: rgba(46, 189, 133, 0.2);
+        }
+
+        .status-badge.take_profit {
+            background-color: rgba(255, 77, 77, 0.15);
+            color: var(--color-up);
+            border-color: rgba(255, 77, 77, 0.3);
+            box-shadow: 0 0 8px rgba(255, 77, 77, 0.2);
+        }
+
+        .status-badge.not_traded {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-action {
+            background-color: var(--color-accent);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-action:hover {
+            background-color: var(--color-accent-hover);
+        }
+
+        .btn-action:active {
+            transform: scale(0.98);
+        }
+
+        .btn-action.btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .btn-action.btn-secondary:hover {
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-action.btn-run {
+            background: linear-gradient(135deg, #2962ff 0%, #00b0ff 100%);
+            box-shadow: 0 4px 12px rgba(41, 98, 255, 0.3);
+        }
+
+        .btn-action.btn-run:hover {
+            background: linear-gradient(135deg, #1e4bd8 0%, #0091ea 100%);
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .checkbox-cell {
+            text-align: center;
+            width: 40px;
+        }
+
+        .checkbox-cell input[type="checkbox"] {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="logo-section">
+            <h1>ANTIGRAVITY 自選清單</h1>
+            <span style="font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 12px;">量化模擬實驗室</span>
+        </div>
+        
+        <!-- Navigation Links -->
+        <div class="nav-links">
+            <a href="/index.html" class="btn-tab">選股首頁</a>
+            <a href="/dashboard.html?symbol=2330.TW" class="btn-tab">個股看板</a>
+            <a href="/simulation.html" class="btn-tab">當沖模擬</a>
+            <a href="/watchlist.html" class="btn-tab active">自選清單</a>
+            <a href="/admin.html" id="link-admin-panel" style="display: none; color: #00d984; text-decoration: none; font-weight: 600;" class="btn-tab">管理員後台</a>
+        </div>
+
+        <!-- User Info -->
+        <div class="user-profile-section" style="display: flex; align-items: center; gap: 16px; font-size: 13px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="color: var(--text-secondary);">可用現金:</span>
+                <span id="header-user-cash" style="color: var(--color-accent); font-weight: 700; font-family: monospace;">$10,000,000</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 6px;">
+                <span style="color: var(--text-secondary); font-weight: 600;" id="header-username">載入中...</span>
+            </div>
+            <button onclick="handleLogout()" class="btn-tab" style="padding: 4px 12px; font-size: 12px; cursor: pointer;">登出</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="watchlist-page">
+        
+        <!-- Upper Panel: Control & Operations -->
+        <section class="panel" style="overflow: visible; z-index: 100;">
+            <div class="panel-header">
+                <span>自選清單控制面板</span>
+                <span style="font-size: 11px; color: var(--text-muted);">新增自選股 • 模擬參數設定 • 批次操作</span>
+            </div>
+            <div class="panel-body" style="padding: 16px; background-color: var(--bg-panel); overflow: visible;">
+                <div class="control-panel-grid">
+                    
+                    <!-- Search and Add Section -->
+                    <div class="form-group search-container">
+                        <label for="symbol-search-input">搜尋並新增股票</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="symbol-search-input" placeholder="輸入代號或名稱..." autocomplete="off"
+                                   style="background: var(--bg-main); border: 1px solid var(--border-color); color: #fff; padding: 8px 12px; border-radius: 4px; font-size: 13px; flex-grow: 1;">
+                            <button type="button" id="btn-add-item" class="btn-action" onclick="handleAddWatchlist()">➕ 新增</button>
+                        </div>
+                        <div id="search-suggestions" class="search-suggestions-dropdown"></div>
+                    </div>
+
+                    <!-- Budget Limit -->
+                    <div class="form-group">
+                        <label for="allocated-limit">每檔股票交易額度上限 (元)</label>
+                        <input type="number" id="allocated-limit" value="500000" step="50000" min="10000" 
+                               style="background: var(--bg-main); border: 1px solid var(--border-color); color:#fff; padding: 8px 12px; border-radius: 4px; font-size:13px; font-family: var(--font-mono); width: 100%;">
+                    </div>
+
+                    <!-- Batch Operations & Simulation Buttons -->
+                    <div style="grid-column: span 1; display: flex; flex-direction: column; gap: 8px; justify-content: flex-end;">
+                        <div style="display: flex; gap: 8px; width: 100%;">
+                            <button type="button" id="btn-delete-checked" class="btn-action btn-secondary" onclick="handleDeleteChecked()" style="flex: 1;">
+                                ❌ 移除勾選股票
+                            </button>
+                            <button type="button" id="btn-import" class="btn-action btn-secondary" onclick="triggerImport()" style="flex: 1;">
+                                <span id="import-spinner" class="spinner" style="display: none;"></span>
+                                <span id="import-btn-text">📥 匯入自選 Ticks</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="grid-column: span 1; display: flex; flex-direction: column; gap: 8px; justify-content: flex-end;">
+                        <button type="button" id="btn-run" class="btn-action btn-run" onclick="triggerSimulation(false)" style="width: 100%;">
+                            <span id="run-spinner" class="spinner" style="display: none;"></span>
+                            <span id="run-btn-text">⚡ 執行當沖模擬 (波峰波谷)</span>
+                        </button>
+                        <button type="button" id="btn-run-open" class="btn-action btn-run" onclick="triggerSimulation(true)" style="width: 100%; background-color: #6f42c1;">
+                            <span id="run-open-spinner" class="spinner" style="display: none;"></span>
+                            <span id="run-open-btn-text">⚡ 執行當沖模擬 (開盤多空)</span>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- Summary Metrics Dashboard -->
+        <section class="metrics-grid" id="metrics-section" style="display: none;">
+            <div class="metric-card pnl-card" id="metric-pnl-card">
+                <span class="metric-label">自選股實驗總損益 (含稅費)</span>
+                <span class="metric-value" id="metric-total-pnl">$ 0</span>
+                <span class="metric-sub" id="metric-pnl-sub">勝率估算中...</span>
+            </div>
+
+            <div class="metric-card" style="--color-accent: #ffb300;">
+                <span class="metric-label">自選股交易勝率 (正損益)</span>
+                <span class="metric-value" id="metric-win-rate">0.00%</span>
+                <span class="metric-sub" id="metric-win-ratio">0 勝 / 0 敗</span>
+            </div>
+
+            <div class="metric-card" style="--color-accent: #00d984;">
+                <span class="metric-label">模擬交易參與率</span>
+                <span class="metric-value" id="metric-traded-stocks">0 / 0</span>
+                <span class="metric-sub" id="metric-traded-sub">大於額度上限股則略過</span>
+            </div>
+
+            <div class="metric-card" style="--color-accent: #e57373;">
+                <span class="metric-label">估算交易手續費與稅金</span>
+                <span class="metric-value" id="metric-cost">NT$ 0</span>
+                <span class="metric-sub" id="metric-cost-sub">手續費 2 折 + 證交稅 0.15%</span>
+            </div>
+        </section>
+
+        <!-- Bottom Panel: Watchlist Table -->
+        <section class="panel" style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 300px;">
+            <div class="panel-header">
+                <span>自選股票清單</span>
+                <span id="watchlist-count" style="font-size: 11px; color: var(--text-muted);">共 0 檔股票</span>
+            </div>
+            
+            <div class="panel-body" style="flex-grow: 1; overflow-y: auto;">
+                <table class="screener-list" style="font-size: 13px;">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell" style="padding: 12px 10px;">
+                                <input type="checkbox" id="check-all" onclick="toggleCheckAll(this)">
+                            </th>
+                            <th>股票代號</th>
+                            <th>名稱</th>
+                            <th style="text-align: right;">現價 (元)</th>
+                            <th style="text-align: right;">漲跌幅</th>
+                            <th style="text-align: right;">當日總量 (股)</th>
+                            <th style="text-align: right;">當沖模擬損益</th>
+                            <th style="text-align: center;">當沖交易狀態</th>
+                            <th style="text-align: center;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="watchlist-tbody">
+                        <tr>
+                            <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 50px;">
+                                載入自選清單中...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        const token = localStorage.getItem('token');
+        let watchlistData = [];
+
+        // Initialize autocomplete on DOM load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserProfile();
+            loadWatchlist();
+            initSearchAutocomplete();
+        });
+
+        function handleLogout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            localStorage.removeItem('role');
+            window.location.href = '/login.html';
+        }
+
+        async function loadUserProfile() {
+            try {
+                const response = await fetch('/api/user/profile', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                if (response.ok && res.result) {
+                    document.getElementById('header-username').textContent = res.result.username;
+                    if (res.result.role === 'admin') {
+                        document.getElementById('link-admin-panel').style.display = 'inline-block';
+                    }
+                    
+                    const cashResponse = await fetch('/api/inventory', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const cashRes = await cashResponse.json();
+                    if (cashResponse.ok && cashRes.result) {
+                        const cashVal = cashRes.result.summary.cash;
+                        document.getElementById('header-user-cash').textContent = '$' + cashVal.toLocaleString();
+                    }
+                } else {
+                    handleLogout();
+                }
+            } catch (err) {
+                console.error("Failed to load profile:", err);
+            }
+        }
+
+        async function loadWatchlist() {
+            try {
+                const response = await fetch('/api/watchlist', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                if (response.ok && res.result) {
+                    watchlistData = res.result;
+                    renderWatchlist(watchlistData);
+                    calculateOverallMetrics(watchlistData);
+                }
+            } catch (err) {
+                console.error("Failed to load watchlist:", err);
+            }
+        }
+
+        function renderWatchlist(items) {
+            const tbody = document.getElementById('watchlist-tbody');
+            document.getElementById('watchlist-count').textContent = `共 ${items.length} 檔股票`;
+            document.getElementById('check-all').checked = false;
+
+            if (items.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 50px;">
+                            自選清單目前為空，請使用上方搜尋框新增股票。
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let rowsHtml = '';
+            items.forEach((item, idx) => {
+                const symbol = item.symbol;
+                const name = item.name;
+                const price = item.price.toFixed(2);
+                
+                // Color formatting for changes
+                const changeVal = item.change || 0.0;
+                const changePctVal = item.change_percent || 0.0;
+                let changeClass = '';
+                let prefix = '';
+                if (changeVal > 0) {
+                    changeClass = 'up';
+                    prefix = '+';
+                } else if (changeVal < 0) {
+                    changeClass = 'down';
+                }
+                const changeText = `${prefix}${changeVal.toFixed(2)} (${prefix}${changePctVal.toFixed(2)}%)`;
+
+                const volume = item.volume ? item.volume.toLocaleString() : '0';
+
+                // Simulation PnL formatting
+                let pnlClass = '';
+                let pnlText = '-';
+                if (item.sim_pnl !== null) {
+                    if (item.sim_pnl > 0) {
+                        pnlClass = 'up';
+                        pnlText = `+ $${item.sim_pnl.toLocaleString()}`;
+                    } else if (item.sim_pnl < 0) {
+                        pnlClass = 'down';
+                        pnlText = `- $${Math.abs(item.sim_pnl).toLocaleString()}`;
+                    } else {
+                        pnlText = `$0`;
+                    }
+                }
+
+                // Status Badge
+                let statusBadge = `<span class="status-badge not_traded">未交易</span>`;
+                if (item.sim_status === 'SUCCESS') {
+                    statusBadge = `<span class="status-badge success">完成當沖</span>`;
+                } else if (item.sim_status === 'STOP_LOSS') {
+                    statusBadge = `<span class="status-badge stop_loss">停損出場</span>`;
+                } else if (item.sim_status === 'TAKE_PROFIT') {
+                    statusBadge = `<span class="status-badge take_profit">停利出場</span>`;
+                }
+
+                rowsHtml += `
+                    <tr>
+                        <td class="checkbox-cell" style="padding: 12px 10px;">
+                            <input type="checkbox" class="row-checkbox" value="${symbol}" onclick="onRowCheckboxClick()">
+                        </td>
+                        <td style="font-family: var(--font-mono); font-weight: bold; color: var(--color-accent);">
+                            <a href="/dashboard.html?symbol=${symbol}" style="color: var(--color-accent); text-decoration: none;">${symbol}</a>
+                        </td>
+                        <td>${name}</td>
+                        <td style="text-align: right;" class="mono">${price}</td>
+                        <td style="text-align: right;" class="${changeClass} mono">${changeText}</td>
+                        <td style="text-align: right;" class="mono">${volume}</td>
+                        <td style="text-align: right; font-weight: bold;" class="${pnlClass} mono">${pnlText}</td>
+                        <td style="text-align: center;">${statusBadge}</td>
+                        <td style="text-align: center;">
+                            <a href="/dashboard.html?symbol=${symbol}" class="btn-tab" style="text-decoration: none; display: inline-block;">📊 開啟看板</a>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = rowsHtml;
+        }
+
+        function toggleCheckAll(master) {
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => cb.checked = master.checked);
+        }
+
+        function onRowCheckboxClick() {
+            const total = document.querySelectorAll('.row-checkbox').length;
+            const checked = document.querySelectorAll('.row-checkbox:checked').length;
+            document.getElementById('check-all').checked = (total === checked && total > 0);
+        }
+
+        // Autocomplete search
+        function initSearchAutocomplete() {
+            const searchInput = document.getElementById("symbol-search-input");
+            const suggestions = document.getElementById("search-suggestions");
+
+            searchInput.addEventListener("input", async (e) => {
+                const query = e.target.value.trim();
+                if (query.length === 0) {
+                    suggestions.style.display = "none";
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`/api/stocks/search?query=${encodeURIComponent(query)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.status === 401) {
+                        handleLogout();
+                        return;
+                    }
+                    const json = await res.json();
+                    if (json.status === 200 && json.result.results.length > 0) {
+                        suggestions.innerHTML = "";
+                        json.result.results.forEach(item => {
+                            const div = document.createElement("div");
+                            div.className = "suggestion-item";
+                            div.style.padding = "8px 12px";
+                            div.style.cursor = "pointer";
+                            div.style.fontSize = "12px";
+                            div.style.borderBottom = "1px solid rgba(255,255,255,0.02)";
+                            div.innerHTML = `<span style="font-weight:600; color:#fff;">${item.name}</span> <span style="color:var(--text-muted); font-family:monospace; margin-left:8px;">${item.symbol}</span>`;
+                            
+                            div.addEventListener("click", () => {
+                                searchInput.value = item.symbol;
+                                suggestions.style.display = "none";
+                            });
+                            suggestions.appendChild(div);
+                        });
+                        suggestions.style.display = "block";
+                    } else {
+                        suggestions.innerHTML = `<div style="padding: 8px 12px; color: var(--text-muted); font-size:12px;">查無相符股票</div>`;
+                        suggestions.style.display = "block";
+                    }
+                } catch (err) {
+                    console.error("Search error:", err);
+                }
+            });
+
+            document.addEventListener("click", (e) => {
+                if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                    suggestions.style.display = "none";
+                }
+            });
+        }
+
+        async function handleAddWatchlist() {
+            const input = document.getElementById("symbol-search-input");
+            const symbol = input.value.trim().toUpperCase();
+            if (!symbol) {
+                alert("請先輸入股票代號！");
+                return;
+            }
+
+            const btn = document.getElementById("btn-add-item");
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/watchlist', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ symbol: symbol })
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    input.value = "";
+                    loadWatchlist();
+                } else {
+                    alert(res.detail || "新增失敗");
+                }
+            } catch (err) {
+                alert("網路請求失敗: " + err.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function handleDeleteChecked() {
+            const checkedCbs = document.querySelectorAll('.row-checkbox:checked');
+            if (checkedCbs.length === 0) {
+                alert("請先勾選要移除的股票！");
+                return;
+            }
+
+            if (!confirm(`確定要將這 ${checkedCbs.length} 檔股票從自選清單中移除嗎？`)) {
+                return;
+            }
+
+            const symbols = Array.from(checkedCbs).map(cb => cb.value);
+            const btn = document.getElementById("btn-delete-checked");
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/watchlist/delete-multiple', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ symbols: symbols })
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    loadWatchlist();
+                } else {
+                    alert(res.detail || "刪除失敗");
+                }
+            } catch (err) {
+                alert("網路失敗: " + err.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function triggerImport() {
+            const btn = document.getElementById('btn-import');
+            const spinner = document.getElementById('import-spinner');
+            const text = document.getElementById('import-btn-text');
+
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+            text.textContent = ' 正在匯入 Ticks...';
+
+            try {
+                const response = await fetch('/api/watchlist/import', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    alert(res.result.message || 'Ticks 匯入成功！');
+                    loadWatchlist();
+                } else {
+                    alert('匯入失敗: ' + (res.detail || '未知錯誤'));
+                }
+            } catch (err) {
+                alert('網路錯誤: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+                text.textContent = '📥 匯入自選 Ticks';
+            }
+        }
+
+        async function triggerSimulation(isOpenBase = false) {
+            const checkedCbs = document.querySelectorAll('.row-checkbox:checked');
+            if (checkedCbs.length === 0) {
+                alert("請先勾選要做交易模擬的股票！");
+                return;
+            }
+
+            const limitVal = parseFloat(document.getElementById('allocated-limit').value);
+            if (isNaN(limitVal) || limitVal < 1000) {
+                alert('請輸入正確的每檔額度上限 (最低 1,000 元)');
+                return;
+            }
+
+            const symbols = Array.from(checkedCbs).map(cb => cb.value);
+
+            const btn = isOpenBase ? document.getElementById('btn-run-open') : document.getElementById('btn-run');
+            const spinner = isOpenBase ? document.getElementById('run-open-spinner') : document.getElementById('run-spinner');
+            const text = isOpenBase ? document.getElementById('run-open-btn-text') : document.getElementById('run-btn-text');
+
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+            text.textContent = ' 正在執行當沖模擬...';
+
+            const endpoint = isOpenBase ? '/api/watchlist/run-open-base' : '/api/watchlist/run';
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        allocated_limit: limitVal,
+                        symbols: symbols
+                    })
+                });
+                const res = await response.json();
+                if (response.ok) {
+                    loadWatchlist();
+                } else {
+                    alert('模擬失敗: ' + (res.detail || '未知錯誤'));
+                }
+            } catch (err) {
+                alert('網路錯誤: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+                text.textContent = isOpenBase ? '⚡ 執行當沖模擬 (開盤多空)' : '⚡ 執行當沖模擬 (波峰波谷)';
+            }
+        }
+
+        function calculateOverallMetrics(items) {
+            const tradedItems = items.filter(i => i.sim_pnl !== null && i.sim_status !== 'NOT_TRADED');
+            
+            if (tradedItems.length === 0) {
+                document.getElementById('metrics-section').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('metrics-section').style.display = 'grid';
+
+            let totalPnl = 0;
+            let winCount = 0;
+            let lossCount = 0;
+            
+            // In Taiwan trading, costs can be approximated as follows for the metrics:
+            // Since simulated pnl from backend already includes fees & taxes, we can display it directly.
+            // Let's calculate total simulated PnL
+            tradedItems.forEach(i => {
+                totalPnl += i.sim_pnl;
+                if (i.sim_pnl > 0) {
+                    winCount++;
+                } else if (i.sim_pnl < 0) {
+                    lossCount++;
+                }
+            });
+
+            // Display Total PnL Card
+            const pnlCard = document.getElementById('metric-pnl-card');
+            const totalPnlSpan = document.getElementById('metric-total-pnl');
+            const pnlSub = document.getElementById('metric-pnl-sub');
+
+            const formattedPnl = totalPnl.toLocaleString();
+            if (totalPnl > 0) {
+                pnlCard.className = 'metric-card pnl-card positive';
+                totalPnlSpan.textContent = `+ NT$ ${formattedPnl}`;
+                totalPnlSpan.style.color = 'var(--color-up)';
+            } else if (totalPnl < 0) {
+                pnlCard.className = 'metric-card pnl-card negative';
+                totalPnlSpan.textContent = `- NT$ ${Math.abs(totalPnl).toLocaleString()}`;
+                totalPnlSpan.style.color = 'var(--color-down)';
+            } else {
+                pnlCard.className = 'metric-card pnl-card';
+                totalPnlSpan.textContent = `NT$ 0`;
+                totalPnlSpan.style.color = 'var(--text-primary)';
+            }
+
+            const winRate = tradedItems.length > 0 ? ((winCount / tradedItems.length) * 100).toFixed(2) : '0.00';
+            pnlSub.textContent = `勝率: ${winRate}% | 已交易: ${tradedItems.length} 檔`;
+
+            document.getElementById('metric-win-rate').textContent = `${winRate}%`;
+            document.getElementById('metric-win-ratio').textContent = `${winCount} 勝 / ${lossCount} 敗`;
+            
+            document.getElementById('metric-traded-stocks').textContent = `${tradedItems.length} / ${items.length}`;
+            document.getElementById('metric-traded-sub').textContent = `共 ${items.length} 檔自選股`;
+
+            // Display estimated fee & taxes (hand-waived metrics approximation or show from backend?
+            // Since we don't have separate fee/tax sums in custom join without loading all trades, 
+            // we can just display a simple proportional cost representation or hide this card if not needed.
+            // Let's approximate it as 0.25% of trading volume as a rough visual aid or read from backend trades logs
+            // Let's estimate it at 0.3% of simulated trades or just display a flat summary, e.g. "請看交易明細" or "已併入損益計算"
+            document.getElementById('metric-cost').textContent = `已計入總損益`;
+            document.getElementById('metric-cost-sub').textContent = `包含手續費 2 折 + 證交稅 0.15%`;
+        }
+    </script>
+</body>
+</html>

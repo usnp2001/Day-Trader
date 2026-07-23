@@ -23,7 +23,7 @@ from broker import MockBroker
 from crawler import StockCrawler
 
 # Controllers
-from controller import auth_controller, account_controller, order_controller, stock_controller, admin_controller, day_trading_controller
+from controller import auth_controller, account_controller, order_controller, stock_controller, admin_controller, day_trading_controller, watchlist_controller
 
 app = FastAPI(
     title="Day Trading Web Platform API - Phase 3 (MVC Refactoring)",
@@ -54,6 +54,7 @@ app.include_router(order_controller.router)
 app.include_router(stock_controller.router)
 app.include_router(admin_controller.router)
 app.include_router(day_trading_controller.router)
+app.include_router(watchlist_controller.router)
 
 # Instantiate crawler for startup background sync
 crawler = StockCrawler()
@@ -102,10 +103,38 @@ async def websocket_market_stream(websocket: WebSocket, symbol: str, token: Opti
 
     user_broker = MockBroker(username=username)
     try:
-        while True:
-            market_data = user_broker.generate_live_market_data(symbol, base_price)
+        import datetime
+        now = datetime.datetime.now()
+        is_closed = now.time() >= datetime.time(13, 30, 0) or now.time() < datetime.time(9, 0, 0)
+
+        if is_closed:
+            # Market is closed: Send one final static snapshot representing the final result
+            market_data = {
+                "symbol": symbol,
+                "price": base_price,
+                "time": "13:30:00",
+                "tick": {
+                    "price": base_price,
+                    "volume": 0,
+                    "direction": "NEUTRAL"
+                },
+                "depth": {
+                    "bids": [],
+                    "asks": []
+                },
+                "is_closed": True
+            }
             await websocket.send_json(market_data)
-            await asyncio.sleep(0.5)
+            logger.info(f"[WebSocket] Market is closed. Sent final static snapshot for {symbol} to user '{username}'.")
+            while True:
+                await asyncio.sleep(3600)
+        else:
+            # Market is open: stream live fluctuating market data
+            while True:
+                market_data = user_broker.generate_live_market_data(symbol, base_price)
+                market_data["is_closed"] = False
+                await websocket.send_json(market_data)
+                await asyncio.sleep(0.5)
     except WebSocketDisconnect:
         logger.info(f"[WebSocket] Disconnected user '{username}' from market stream: {symbol}")
     except Exception as e:

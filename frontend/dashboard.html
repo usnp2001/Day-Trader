@@ -71,6 +71,7 @@
             </div>
             <a href="/admin.html" id="link-admin-panel" style="display: none; color: #00d984; text-decoration: none; font-weight: 600;" class="btn-tab">管理員後台</a>
             <a href="/simulation.html" style="color: #ffaa00; text-decoration: none; font-weight: 600;" class="btn-tab">當沖模擬</a>
+            <a href="/watchlist.html" style="color: #00b0ff; text-decoration: none; font-weight: 600;" class="btn-tab">自選清單</a>
             <button onclick="handleLogout()" class="btn-tab" style="padding: 4px 12px; font-size: 12px; cursor: pointer;">登出</button>
         </div>
     </header>
@@ -83,6 +84,7 @@
             <div class="panel-header">
                 <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                     <span id="active-stock-title">載入中...</span>
+                    <button id="btn-watchlist-toggle" style="background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-muted); outline: none; padding: 0 4px; display: inline-flex; align-items: center;" title="加入自選清單">☆</button>
                     <div id="active-stock-stats" style="display: flex; align-items: center; gap: 8px; font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); background: rgba(255,255,255,0.02); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border-color);">
                         <span style="color: var(--text-muted);">讀取中...</span>
                     </div>

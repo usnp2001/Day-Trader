@@ -168,6 +168,16 @@ def init_db():
         )
     """)
     conn.commit()
+
+    # 8. User Watchlist table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_watchlist (
+            username TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            PRIMARY KEY (username, symbol)
+        )
+    """)
+    conn.commit()
     
     # stockId migration
     if not column_exists(cursor, "stock_metadata", "stockId"):
@@ -325,11 +335,13 @@ def init_db():
             price REAL NOT NULL,
             volume INTEGER NOT NULL,
             tick_type TEXT NOT NULL DEFAULT 'OUTER',
-            PRIMARY KEY (symbol, timestamp)
+            created_date TEXT
         )
     """)
     if not column_exists(cursor, "day_trading_ticks", "tick_type"):
         cursor.execute("ALTER TABLE day_trading_ticks ADD COLUMN tick_type TEXT NOT NULL DEFAULT 'OUTER'")
+    if not column_exists(cursor, "day_trading_ticks", "created_date"):
+        cursor.execute("ALTER TABLE day_trading_ticks ADD COLUMN created_date TEXT")
     
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS day_trading_trades (

@@ -237,7 +237,8 @@ async function fetchKlineHistory() {
                 const klineData = json.result.data;
                 const initialTicks = klineData.map(d => ({
                     time: d.time,
-                    price: d.close
+                    price: d.close,
+                    volume: d.volume || 0
                 }));
                 state.uplotManager.initChart(initialTicks);
 
@@ -326,13 +327,25 @@ function connectWebSocket() {
 }
 
 function handleLiveMarketPacket(data) {
+    if (data.is_closed) {
+        const statusText = document.getElementById("status-text");
+        if (statusText) {
+            statusText.innerText = "已收盤 (最終結果)";
+        }
+        const dot = document.getElementById("status-dot");
+        if (dot) {
+            dot.className = "status-dot";
+        }
+        return;
+    }
+
     // Ensure tick object has the transaction timestamp
     if (data.tick && !data.tick.time) {
         data.tick.time = data.time;
     }
 
     if (state.selectedInterval === "ticks") {
-        state.uplotManager.addTick(data.tick.time, data.tick.price);
+        state.uplotManager.addTick(data.tick.time, data.tick.price, data.tick.volume || 0);
     } else {
         state.chartManager.updateTick(data.tick);
     }
@@ -475,6 +488,12 @@ function switchStock(symbol, name) {
 // ==========================================
 
 function bindUIEvents() {
+    // Watchlist toggle button
+    const wlToggle = document.getElementById("btn-watchlist-toggle");
+    if (wlToggle) {
+        wlToggle.addEventListener("click", toggleWatchlist);
+    }
+
     // K-Line timeframe selector
     document.querySelectorAll("#timeframe-controls .btn-tab").forEach(btn => {
         btn.addEventListener("click", (e) => {
@@ -605,6 +624,7 @@ function showBottomTab(tabName) {
 
 function updateActiveStockUI() {
     document.getElementById("active-stock-title").innerText = `${state.selectedName} (${state.selectedSymbol})`;
+    updateWatchlistIconState();
 }
 
 async function fetchActiveStockDailyStats() {
@@ -1011,4 +1031,80 @@ function formatPNL(val) {
     const sign = val > 0 ? "+" : "";
     const colorClass = val > 0 ? "up" : (val < 0 ? "down" : "");
     return `<span class="${colorClass}">${sign}NT$ ${Math.round(val).toLocaleString()}</span>`;
+}
+
+// ==========================================
+// WATCHLIST TOGGLE LOGIC
+// ==========================================
+
+async function updateWatchlistIconState() {
+    const btn = document.getElementById("btn-watchlist-toggle");
+    if (!btn) return;
+    
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/watchlist/check/${state.selectedSymbol}`, {
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            const json = await res.json();
+            if (json.status === 200) {
+                const inWatchlist = json.result.in_watchlist;
+                if (inWatchlist) {
+                    btn.textContent = "★";
+                    btn.style.color = "#ffaa00";
+                    btn.title = "已加入自選清單，點擊移除";
+                } else {
+                    btn.textContent = "☆";
+                    btn.style.color = "var(--text-muted)";
+                    btn.title = "加入自選清單";
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Error checking watchlist state:", e);
+    }
+}
+
+async function toggleWatchlist() {
+    const btn = document.getElementById("btn-watchlist-toggle");
+    if (!btn) return;
+    
+    btn.disabled = true;
+    const isAdded = (btn.textContent === "★");
+    
+    try {
+        if (isAdded) {
+            // Remove from watchlist
+            const res = await fetch(`${API_BASE_URL}/api/watchlist?symbol=${encodeURIComponent(state.selectedSymbol)}`, {
+                method: "DELETE",
+                headers: getAuthHeaders()
+            });
+            if (res.ok) {
+                await updateWatchlistIconState();
+            } else {
+                const json = await res.json();
+                alert(json.detail || "移除失敗");
+            }
+        } else {
+            // Add to watchlist
+            const res = await fetch(`${API_BASE_URL}/api/watchlist`, {
+                method: "POST",
+                headers: {
+                    ...getAuthHeaders(),
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ symbol: state.selectedSymbol })
+            });
+            if (res.ok) {
+                await updateWatchlistIconState();
+            } else {
+                const json = await res.json();
+                alert(json.detail || "加入失敗");
+            }
+        }
+    } catch (e) {
+        console.error("Error toggling watchlist:", e);
+    } finally {
+        btn.disabled = false;
+    }
 }

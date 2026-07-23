@@ -257,6 +257,7 @@
             <a href="/index.html" class="btn-tab">選股首頁</a>
             <a href="/dashboard.html?symbol=2330.TW" class="btn-tab">個股看板</a>
             <a href="/simulation.html" class="btn-tab active">當沖模擬</a>
+            <a href="/watchlist.html" class="btn-tab">自選清單</a>
             <a href="/admin.html" id="link-admin-panel" style="display: none; color: #00d984; text-decoration: none; font-weight: 600;" class="btn-tab">管理員後台</a>
         </div>
 
@@ -780,13 +781,16 @@
                 }
 
                 // Action Link
-                const actionButton = s.status !== 'NOT_TRADED' 
-                    ? `<button class="btn-tab" onclick="viewTradesLog('${symbol}', '${name}')">🔎 交易明細</button>`
-                    : `<span style="color: var(--text-muted); font-size: 11px;">額度不足</span>`;
+                let actionButton = s.status !== 'NOT_TRADED' 
+                    ? `<button class="btn-tab" onclick="viewTradesLog('${symbol}', '${name}')">🔎 明細</button>`
+                    : `<span style="color: var(--text-muted); font-size: 11px; margin-right: 4px;">額度不足</span>`;
+                actionButton += ` <a href="/dashboard.html?symbol=${symbol}" class="btn-tab" style="text-decoration: none; display: inline-block;">📊 看板</a>`;
 
                 rowsHtml += `
                     <tr>
-                        <td style="padding: 12px 10px; font-family: var(--font-mono); font-weight: bold; color: var(--color-accent);">${symbol}</td>
+                        <td style="padding: 12px 10px; font-family: var(--font-mono); font-weight: bold; color: var(--color-accent);">
+                            <a href="/dashboard.html?symbol=${symbol}" style="color: var(--color-accent); text-decoration: none;">${symbol}</a>
+                        </td>
                         <td>${name}</td>
                         <td style="text-align: right;" class="mono">${volume}</td>
                         <td style="text-align: right;" class="mono">${open_p}</td>

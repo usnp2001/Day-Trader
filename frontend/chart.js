@@ -528,15 +528,16 @@ class UPlotChartManager {
 
         this.container.innerHTML = "";
 
-        // Format data: uPlot expects [[timestamps], [prices]]
+        // Format data: uPlot expects [[timestamps], [prices], [volumes]]
         if (initialTicks && initialTicks.length > 0) {
             this.data = [
                 initialTicks.map(t => typeof t.time === 'number' ? t.time : this._parseTimeString(t.time)),
-                initialTicks.map(t => t.price)
+                initialTicks.map(t => t.price),
+                initialTicks.map(t => t.volume || 0)
             ];
         } else {
             const nowSec = Math.floor(Date.now() / 1000);
-            this.data = [[nowSec], [0.0]];
+            this.data = [[nowSec], [0.0], [0]];
         }
 
         const parentWidth = this.container.parentElement ? this.container.parentElement.clientWidth : 0;
@@ -552,6 +553,43 @@ class UPlotChartManager {
 
         console.log(`[uPlot Debug] initChart: ticksCount=${initialTicks ? initialTicks.length : 0}, parentWidth=${parentWidth}, containerWidth=${this.container.clientWidth}, finalWidth=${width}, height=${height}, tickSize=${tickSize}`);
 
+        // Custom paths builder for drawing volume bar charts
+        function drawUPlotVolumeBars(self, seriesIdx, idx0, idx1) {
+            const fillPath = new Path2D();
+            
+            const xData = self.data[0];
+            const yData = self.data[seriesIdx];
+            const series = self.series[seriesIdx];
+            
+            // Volume starts at the absolute bottom of the plotting grid area
+            const zeroPos = self.bbox.top + self.bbox.height;
+            
+            // Dynamically calculate bar width
+            const pointsCount = xData.length;
+            const chartWidth = self.bbox.width;
+            const barWidth = Math.max(1, Math.floor(chartWidth / (pointsCount || 1)) - 1);
+            
+            for (let i = idx0; i <= idx1; i++) {
+                const val = yData[i];
+                if (val === null || val === undefined) continue;
+                
+                const xPos = self.valToPos(xData[i], "x");
+                const yPos = self.valToPos(val, series.scale);
+                
+                const x = Math.round(xPos - barWidth / 2);
+                const y = Math.round(yPos);
+                const w = Math.round(barWidth);
+                const h = Math.round(zeroPos - yPos);
+                
+                fillPath.rect(x, y, w, h);
+            }
+            
+            return {
+                stroke: null,
+                fill: fillPath
+            };
+        }
+
         const opts = {
             width: width,
             height: height,
@@ -565,6 +603,10 @@ class UPlotChartManager {
                 },
                 y: {
                     auto: true,
+                },
+                vol: {
+                    auto: true,
+                    range: (self, min, max) => [0, max * 3] // scale volume to occupy the bottom 33% of the canvas
                 }
             },
             series: [
@@ -584,6 +626,14 @@ class UPlotChartManager {
                     fill: "rgba(0, 176, 255, 0.05)",
                     label: "價格",
                     value: (self, rawValue) => "NT$ " + (rawValue ? rawValue.toFixed(2) : "0.00"),
+                },
+                {
+                    // Y2-axis Volume formatting (bottom bar chart)
+                    scale: 'vol',
+                    fill: "rgba(255, 255, 255, 0.35)", // more obvious translucent volume bars
+                    label: "成交量",
+                    paths: drawUPlotVolumeBars,
+                    value: (self, rawValue) => rawValue ? rawValue.toLocaleString() + " 股" : "0 股",
                 }
             ],
             axes: [
@@ -668,12 +718,13 @@ class UPlotChartManager {
         }
     }
 
-    addTick(tickTime, tickPrice) {
+    addTick(tickTime, tickPrice, tickVolume = 0) {
         if (!this.uplot) return;
 
         let timestamp = (typeof tickTime === 'number') ? tickTime : this._parseTimeString(tickTime);
         const xData = this.data[0];
         const yData = this.data[1];
+        const volData = this.data[2] || [];
 
         // uPlot requires strictly increasing x values
         if (xData.length > 0 && timestamp <= xData[xData.length - 1]) {
@@ -682,13 +733,16 @@ class UPlotChartManager {
 
         xData.push(timestamp);
         yData.push(tickPrice);
+        volData.push(tickVolume);
 
         // Limit tick history size to prevent canvas latency
         if (xData.length > 300) {
             xData.shift();
             yData.shift();
+            volData.shift();
         }
 
+        this.data = [xData, yData, volData];
         this.uplot.setData(this.data);
     }
 }
