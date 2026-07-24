@@ -23,7 +23,11 @@ from common.config import DB_TYPE, DB_FILE
 from common.base_dao import BaseDAO, OperationalError
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Referer": "https://www.twse.com.tw/zh/trading/foreign/t86.html",
+    "Connection": "keep-alive"
 }
 
 def try_float(val):
@@ -151,6 +155,65 @@ def sync_yfinance_top_50():
         StockMetadataDao.update_stock_metadata(update_list)
         logger.info(f"[SyncOfficial] Updated {len(update_list)} target stocks with yfinance fundamentals.")
 
+def parse_t86_data(raw_data, is_csv, twse_map):
+    try:
+        if is_csv:
+            import csv
+            reader = csv.reader(raw_data.splitlines())
+            header = None
+            data_rows = []
+            for r in reader:
+                if not r:
+                    continue
+                if "證券代號" in r:
+                    header = [col.strip() for col in r]
+                    continue
+                if header:
+                    if len(r) < len(header):
+                        break
+                    data_rows.append([col.strip() for col in r])
+        else:
+            json_data = raw_data
+            if json_data.get("stat") != "OK" or "data" not in json_data:
+                return False
+            header = json_data.get("fields", [])
+            data_rows = json_data["data"]
+            
+        if not header:
+            return False
+            
+        idx_sym = header.index("證券代號") if "證券代號" in header else 0
+        idx_foreign_1 = -1
+        idx_foreign_2 = -1
+        idx_trust = -1
+        idx_dealer = -1
+        for idx, f in enumerate(header):
+            if "外陸資買賣超股數" in f and "不含外資自營商" in f:
+                idx_foreign_1 = idx
+            elif "外資自營商買賣超股數" in f:
+                idx_foreign_2 = idx
+            elif "投信買賣超股數" in f:
+                idx_trust = idx
+            elif "自營商買賣超股數" in f and "自行買賣" not in f and "避險" not in f:
+                idx_dealer = idx
+                
+        for row in data_rows:
+            sym = row[idx_sym].strip().replace("=", "").replace('"', '') + ".TW"
+            if sym not in twse_map:
+                continue
+            foreign_超1 = try_int(row[idx_foreign_1]) if idx_foreign_1 != -1 else 0
+            foreign_超2 = try_int(row[idx_foreign_2]) if idx_foreign_2 != -1 else 0
+            trust_超 = try_int(row[idx_trust]) if idx_trust != -1 else 0
+            dealer_超 = try_int(row[idx_dealer]) if idx_dealer != -1 else 0
+            
+            twse_map[sym]["foreign_net_buy"] = foreign_超1 + foreign_超2
+            twse_map[sym]["trust_net_buy"] = trust_超
+            twse_map[sym]["dealer_net_buy"] = dealer_超
+        return True
+    except Exception as e:
+        logger.error(f"[SyncOfficial] Parse error inside T86: {e}")
+        return False
+
 def execute_sync():
     logger.info("==================================================")
     logger.info(" STARTING OFFICIAL DATA SYNCHRONIZATION JOB")
@@ -190,44 +253,37 @@ def execute_sync():
     # 2. Fetch TWSE T86 Institutional Trades for that specific date
     if gregorian_date:
         logger.info(f"[SyncOfficial] Fetching TWSE T86 Institutional Trades for {gregorian_date}...")
-        url = f"https://www.twse.com.tw/fund/T86?response=json&date={gregorian_date}&selectType=ALLBUT0999"
-        try:
-            resp = requests.get(url, headers=HEADERS, timeout=30)
-            if resp.status_code == 200:
-                json_data = resp.json()
-                if json_data.get("stat") == "OK" and "data" in json_data:
-                    fields = json_data.get("fields", [])
-                    idx_sym = fields.index("證券代號") if "證券代號" in fields else 0
-                    
-                    idx_foreign_1 = -1
-                    idx_foreign_2 = -1
-                    idx_trust = -1
-                    idx_dealer = -1
-                    for idx, f in enumerate(fields):
-                        if "外陸資買賣超股數" in f and "不含外資自營商" in f:
-                            idx_foreign_1 = idx
-                        elif "外資自營商買賣超股數" in f:
-                            idx_foreign_2 = idx
-                        elif "投信買賣超股數" in f:
-                            idx_trust = idx
-                        elif "自營商買賣超股數" in f and "自行買賣" not in f and "避險" not in f:
-                            idx_dealer = idx
-                            
-                    for row in json_data["data"]:
-                        sym = row[idx_sym].strip() + ".TW"
-                        if sym not in twse_map:
-                            continue
-                        foreign_超1 = try_int(row[idx_foreign_1]) if idx_foreign_1 != -1 else 0
-                        foreign_超2 = try_int(row[idx_foreign_2]) if idx_foreign_2 != -1 else 0
-                        trust_超 = try_int(row[idx_trust]) if idx_trust != -1 else 0
-                        dealer_超 = try_int(row[idx_dealer]) if idx_dealer != -1 else 0
-                        
-                        twse_map[sym]["foreign_net_buy"] = foreign_超1 + foreign_超2
-                        twse_map[sym]["trust_net_buy"] = trust_超
-                        twse_map[sym]["dealer_net_buy"] = dealer_超
-                    logger.info("[SyncOfficial] Successfully merged TWSE Institutional Trades.")
-        except Exception as e:
-            logger.error(f"[SyncOfficial] Failed to fetch TWSE T86 web endpoint: {e}")
+        
+        success = False
+        last_error = None
+        
+        for attempt in range(1, 4):
+            is_csv = (attempt < 3)
+            fmt = "csv" if is_csv else "json"
+            url = f"https://www.twse.com.tw/fund/T86?response={fmt}&date={gregorian_date}&selectType=ALLBUT0999"
+            
+            try:
+                logger.info(f"[SyncOfficial] Fetching TWSE T86 via {fmt.upper()} (Attempt {attempt}/3)...")
+                resp = requests.get(url, headers=HEADERS, timeout=15)
+                if resp.status_code == 200:
+                    raw_data = resp.text if is_csv else resp.json()
+                    if parse_t86_data(raw_data, is_csv, twse_map):
+                        logger.info(f"[SyncOfficial] Successfully merged TWSE Institutional Trades from {fmt.upper()} endpoint.")
+                        success = True
+                        break
+                    else:
+                        last_error = f"Failed to parse {fmt.upper()} T86 response content"
+                else:
+                    last_error = f"HTTP status code: {resp.status_code}"
+            except Exception as e:
+                last_error = str(e)
+            
+            if attempt < 3:
+                logger.warning(f"[SyncOfficial] T86 attempt {attempt} failed: {last_error}. Retrying in 3 seconds...")
+                time.sleep(3)
+        
+        if not success:
+            logger.error(f"[SyncOfficial] Failed to fetch TWSE T86 web endpoint after 3 attempts. Last error: {last_error}")
 
     # 3. Fetch TWSE Margin Balances from OpenAPI
     logger.info("[SyncOfficial] Fetching TWSE Margin Balances from OpenAPI...")
