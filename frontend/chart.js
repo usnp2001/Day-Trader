@@ -8,6 +8,9 @@ class TradingChartManager {
         this.mainChart = null;
         this.candlestickSeries = null;
         this.avgPriceSeries = null;
+        this.ma8Series = null;
+        this.ma21Series = null;
+        this.ma55Series = null;
         this.volumeSeries = null;
         
         this.indicatorChart = null;
@@ -80,6 +83,32 @@ class TradingChartManager {
             title: '均價線',
             priceScaleId: 'right',
             crosshairMarkerVisible: false, // Prevents crosshair snapping to average price line
+        });
+
+        // Add MA8 - colored yellow/gold
+        this.ma8Series = this.mainChart.addLineSeries({
+            color: '#ffd54f',
+            lineWidth: 1.5,
+            title: 'MA8',
+            priceScaleId: 'right',
+            crosshairMarkerVisible: false,
+        });
+
+        // Add MA21 - colored purple
+        this.ma21Series = this.mainChart.addLineSeries({
+            color: '#ba68c8',
+            lineWidth: 1.5,
+            title: 'MA21',
+            priceScaleId: 'right',
+            crosshairMarkerVisible: false,
+        });
+
+        // Add MA55 - colored cyan/teal
+        this.ma55Series = this.mainChart.addLineSeries({
+            color: '#4db6ac',
+            lineWidth: 1.5,
+            title: 'MA55',
+            priceScaleId: 'right',
         });
 
         // Add Volume series overlaid on bottom
@@ -185,6 +214,30 @@ class TradingChartManager {
             }
         });
 
+        this.ma8Series.applyOptions({
+            priceFormat: {
+                type: 'price',
+                precision: 2,
+                minMove: tickSize
+            }
+        });
+
+        this.ma21Series.applyOptions({
+            priceFormat: {
+                type: 'price',
+                precision: 2,
+                minMove: tickSize
+            }
+        });
+
+        this.ma55Series.applyOptions({
+            priceFormat: {
+                type: 'price',
+                precision: 2,
+                minMove: tickSize
+            }
+        });
+
         // Set candlesticks
         this.candlestickSeries.setData(klineData);
 
@@ -199,6 +252,21 @@ class TradingChartManager {
         // Render average price line (均價線)
         const avgPriceData = this._calculateAveragePriceLine(klineData);
         this.avgPriceSeries.setData(avgPriceData);
+
+        // Render moving averages
+        this.ma8Series.setData(this._calculateSMA(klineData, 8));
+        this.ma21Series.setData(this._calculateSMA(klineData, 21));
+        this.ma55Series.setData(this._calculateSMA(klineData, 55));
+
+        // Sync visibilities with HTML checkboxes
+        const cbAvg = document.getElementById("cb-k-avgprice");
+        const cb8 = document.getElementById("cb-k-ma8");
+        const cb21 = document.getElementById("cb-k-ma21");
+        const cb55 = document.getElementById("cb-k-ma55");
+        if (cbAvg) this.toggleIndicatorVisibility('avgprice', cbAvg.checked);
+        if (cb8) this.toggleIndicatorVisibility('ma8', cb8.checked);
+        if (cb21) this.toggleIndicatorVisibility('ma21', cb21.checked);
+        if (cb55) this.toggleIndicatorVisibility('ma55', cb55.checked);
 
         // Render bottom technical indicator panel
         this.renderIndicators();
@@ -234,9 +302,12 @@ class TradingChartManager {
             color: lastCandle.close >= lastCandle.open ? 'rgba(255,77,77,0.3)' : 'rgba(46,189,133,0.3)'
         });
 
-        // Re-calculate average price and indicators for updated dataset
+        // Re-calculate average price, MAs, and indicators for updated dataset
         const avgPriceData = this._calculateAveragePriceLine(this.rawKlineData);
         this.avgPriceSeries.setData(avgPriceData);
+        this.ma8Series.setData(this._calculateSMA(this.rawKlineData, 8));
+        this.ma21Series.setData(this._calculateSMA(this.rawKlineData, 21));
+        this.ma55Series.setData(this._calculateSMA(this.rawKlineData, 55));
         this.renderIndicators();
     }
 
@@ -316,6 +387,36 @@ class TradingChartManager {
                 value: roundToTick(avgPrice)
             };
         });
+    }
+
+    _calculateSMA(candles, period) {
+        const sma = [];
+        for (let i = 0; i < candles.length; i++) {
+            if (i < period - 1) {
+                continue;
+            }
+            let sum = 0;
+            for (let j = 0; j < period; j++) {
+                sum += candles[i - j].close;
+            }
+            sma.push({
+                time: candles[i].time,
+                value: sum / period
+            });
+        }
+        return sma;
+    }
+
+    toggleIndicatorVisibility(key, isVisible) {
+        if (key === 'ma8' && this.ma8Series) {
+            this.ma8Series.applyOptions({ visible: isVisible });
+        } else if (key === 'ma21' && this.ma21Series) {
+            this.ma21Series.applyOptions({ visible: isVisible });
+        } else if (key === 'ma55' && this.ma55Series) {
+            this.ma55Series.applyOptions({ visible: isVisible });
+        } else if (key === 'avgprice' && this.avgPriceSeries) {
+            this.avgPriceSeries.applyOptions({ visible: isVisible });
+        }
     }
 
     _calculateKD(candles, period = 9, kFactor = 3, dFactor = 3) {
@@ -528,17 +629,39 @@ class UPlotChartManager {
 
         this.container.innerHTML = "";
 
-        // Format data: uPlot expects [[timestamps], [prices], [volumes]]
+        // Sync Ticks Avg Price visibility with checkbox state
+        const cbTAvg = document.getElementById("cb-t-avgprice");
+        this.showAvgPrice = cbTAvg ? cbTAvg.checked : true;
+
+        // Format data: uPlot expects [[timestamps], [prices], [avgPrices], [volumes]]
+        let cumulativeVal = 0;
+        let cumulativeVol = 0;
+        const avgPrices = [];
+        
+        let formattedTicks = [];
         if (initialTicks && initialTicks.length > 0) {
-            this.data = [
-                initialTicks.map(t => typeof t.time === 'number' ? t.time : this._parseTimeString(t.time)),
-                initialTicks.map(t => t.price),
-                initialTicks.map(t => t.volume || 0)
-            ];
+            formattedTicks = initialTicks;
         } else {
-            const nowSec = Math.floor(Date.now() / 1000);
-            this.data = [[nowSec], [0.0], [0]];
+            formattedTicks = [{ time: Math.floor(Date.now() / 1000), price: 0.0, volume: 0 }];
         }
+        
+        for (let i = 0; i < formattedTicks.length; i++) {
+            const t = formattedTicks[i];
+            cumulativeVal += t.price * (t.volume || 0);
+            cumulativeVol += (t.volume || 0);
+            const avg = cumulativeVol > 0 ? (cumulativeVal / cumulativeVol) : t.price;
+            avgPrices.push(avg);
+        }
+        
+        this.cumulativeVal = cumulativeVal;
+        this.cumulativeVol = cumulativeVol;
+        
+        this.data = [
+            formattedTicks.map(t => typeof t.time === 'number' ? t.time : this._parseTimeString(t.time)),
+            formattedTicks.map(t => t.price),
+            avgPrices,
+            formattedTicks.map(t => t.volume || 0)
+        ];
 
         const parentWidth = this.container.parentElement ? this.container.parentElement.clientWidth : 0;
         const width = parentWidth || this.container.clientWidth || 800;
@@ -626,6 +749,15 @@ class UPlotChartManager {
                     fill: "rgba(0, 176, 255, 0.05)",
                     label: "價格",
                     value: (self, rawValue) => "NT$ " + (rawValue ? rawValue.toFixed(2) : "0.00"),
+                },
+                {
+                    // Y-axis Average Price (orange line chart)
+                    scale: 'y',
+                    stroke: "#ff9800",
+                    width: 1.5,
+                    label: "均價",
+                    value: (self, rawValue) => "NT$ " + (rawValue ? rawValue.toFixed(2) : "0.00"),
+                    show: this.showAvgPrice !== undefined ? this.showAvgPrice : true
                 },
                 {
                     // Y2-axis Volume formatting (bottom bar chart)
@@ -724,26 +856,41 @@ class UPlotChartManager {
         let timestamp = (typeof tickTime === 'number') ? tickTime : this._parseTimeString(tickTime);
         const xData = this.data[0];
         const yData = this.data[1];
-        const volData = this.data[2] || [];
+        const avgData = this.data[2] || [];
+        const volData = this.data[3] || [];
 
         // uPlot requires strictly increasing x values
         if (xData.length > 0 && timestamp <= xData[xData.length - 1]) {
             timestamp = xData[xData.length - 1] + 1;
         }
 
+        // Update cumulative values for average price line
+        this.cumulativeVal += tickPrice * tickVolume;
+        this.cumulativeVol += tickVolume;
+        const newAvg = this.cumulativeVol > 0 ? (this.cumulativeVal / this.cumulativeVol) : tickPrice;
+
         xData.push(timestamp);
         yData.push(tickPrice);
+        avgData.push(newAvg);
         volData.push(tickVolume);
 
         // Limit tick history size to prevent canvas latency
         if (xData.length > 300) {
             xData.shift();
             yData.shift();
+            avgData.shift();
             volData.shift();
         }
 
-        this.data = [xData, yData, volData];
+        this.data = [xData, yData, avgData, volData];
         this.uplot.setData(this.data);
+    }
+
+    toggleAvgPriceVisibility(isVisible) {
+        this.showAvgPrice = isVisible;
+        if (this.uplot) {
+            this.uplot.setSeries(2, { show: isVisible });
+        }
     }
 }
 

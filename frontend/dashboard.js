@@ -217,12 +217,18 @@ async function fetchOrders() {
 
 async function fetchKlineHistory() {
     try {
+        const klineCtrls = document.getElementById("kline-indicators-controls");
+        const ticksCtrls = document.getElementById("ticks-indicators-controls");
+
         if (state.selectedInterval === "ticks") {
             // Hide TradingView charts and indicators, show uPlot chart container
             document.getElementById("tradingview-chart").style.display = "none";
             document.getElementById("indicator-header").style.display = "none";
             document.getElementById("indicator-chart").style.display = "none";
             document.getElementById("uplot-chart").style.display = "block";
+
+            if (klineCtrls) klineCtrls.style.display = "none";
+            if (ticksCtrls) ticksCtrls.style.display = "flex";
 
             // Fetch 1m K-line history to seed uPlot initial data points
             const res = await fetch(`${API_BASE_URL}/api/kline/${state.selectedSymbol}?interval=1m`, {
@@ -255,6 +261,9 @@ async function fetchKlineHistory() {
         document.getElementById("indicator-header").style.display = "flex";
         document.getElementById("indicator-chart").style.display = "block";
         document.getElementById("uplot-chart").style.display = "none";
+
+        if (klineCtrls) klineCtrls.style.display = "flex";
+        if (ticksCtrls) ticksCtrls.style.display = "none";
 
         const res = await fetch(`${API_BASE_URL}/api/kline/${state.selectedSymbol}?interval=${state.selectedInterval}`, {
             headers: getAuthHeaders()
@@ -1108,3 +1117,21 @@ async function toggleWatchlist() {
         btn.disabled = false;
     }
 }
+
+// ==========================================
+// TECHNICAL INDICATOR CHECKBOX HANDLERS
+// ==========================================
+
+window.toggleKlineIndicator = function(indicatorKey) {
+    const cb = document.getElementById(`cb-k-${indicatorKey}`);
+    if (cb && state.chartManager) {
+        state.chartManager.toggleIndicatorVisibility(indicatorKey, cb.checked);
+    }
+};
+
+window.toggleTicksIndicator = function(indicatorKey) {
+    const cb = document.getElementById(`cb-t-${indicatorKey}`);
+    if (cb && state.uplotManager) {
+        state.uplotManager.toggleAvgPriceVisibility(cb.checked);
+    }
+};

@@ -89,6 +89,31 @@
                         <span style="color: var(--text-muted);">讀取中...</span>
                     </div>
                 </div>
+                
+                <div style="display: flex; align-items: center; gap: 14px; margin-left: auto; margin-right: 14px; font-size: 11px; color: var(--text-secondary);">
+                    <!-- K-line Technical Indicators Controls -->
+                    <div id="kline-indicators-controls" style="display: flex; align-items: center; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-family: var(--font-mono); user-select: none;">
+                            <input type="checkbox" id="cb-k-avgprice" checked onclick="toggleKlineIndicator('avgprice')"> 均價線
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-family: var(--font-mono); user-select: none;">
+                            <input type="checkbox" id="cb-k-ma8" checked onclick="toggleKlineIndicator('ma8')"> MA8
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-family: var(--font-mono); user-select: none;">
+                            <input type="checkbox" id="cb-k-ma21" checked onclick="toggleKlineIndicator('ma21')"> MA21
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-family: var(--font-mono); user-select: none;">
+                            <input type="checkbox" id="cb-k-ma55" checked onclick="toggleKlineIndicator('ma55')"> MA55
+                        </label>
+                    </div>
+                    <!-- Ticks Technical Indicators Controls -->
+                    <div id="ticks-indicators-controls" style="display: none; align-items: center; gap: 10px;">
+                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-family: var(--font-mono); user-select: none;">
+                            <input type="checkbox" id="cb-t-avgprice" checked onclick="toggleTicksIndicator('avgprice')"> 均價線
+                        </label>
+                    </div>
+                </div>
+
                 <div class="chart-controls" id="timeframe-controls">
                     <button class="btn-tab" data-val="1m">1分K</button>
                     <button class="btn-tab" data-val="5m">5分K</button>
